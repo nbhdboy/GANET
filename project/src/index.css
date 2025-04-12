@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes confetti {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+  }
+}
+
+@keyframes success-pop {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes success-check {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes party-popper {
+  0% {
+    transform: scale(0) rotate(-45deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2) rotate(0deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes progress {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.animate-confetti {
+  animation: confetti 3s ease-out forwards;
+}
+
+.animate-success-pop {
+  animation: success-pop 0.6s ease-out forwards;
+}
+
+.animate-success-check {
+  animation: success-check 0.6s ease-out forwards;
+}
+
+.animate-party-popper {
+  animation: party-popper 0.6s ease-out forwards;
+}
+
+.animate-progress {
+  animation: progress 2.5s ease-in-out forwards;
+}
+
+/* TapPay iframe styles */
+#card-number iframe,
+#card-expiration-date iframe,
+#card-ccv iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  display: block !important;
+  pointer-events: auto !important;
+  background: transparent !important;
+}
+
+/* Focus styles */
+#card-number.focus,
+#card-expiration-date.focus,
+#card-ccv.focus {
+  border-color: #00C300 !important;
+  box-shadow: 0 0 0 2px rgba(0, 195, 0, 0.1) !important;
+}
+
+/* Valid state */
+#card-number.valid,
+#card-expiration-date.valid,
+#card-ccv.valid {
+  border-color: #00C300 !important;
+}
+
+/* Invalid state */
+#card-number.invalid,
+#card-expiration-date.invalid,
+#card-ccv.invalid {
+  border-color: #dc3545 !important;
+}
