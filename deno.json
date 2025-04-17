@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["deno.window", "deno.unstable", "dom", "esnext"],
+    "strict": true,
+    "noImplicitAny": false
+  },
+  "imports": {
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2",
+    "http/server": "https://deno.land/std@0.177.0/http/server.ts"
+  },
+  "importMap": "import_map.json"
+} 

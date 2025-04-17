@@ -32,34 +32,49 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
   const setupCompleted = useRef(false);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const loadTapPay = async () => {
       try {
-        // Check if SDK is already loaded
-        if (window.TPDirect) {
-          console.log('TapPay SDK already loaded');
+        // 檢查全局變數
+        if (window.TPDirect?.card) {
+          console.log('TapPay SDK already initialized');
           setIsTapPayReady(true);
           return;
         }
 
+        // 檢查是否已經有 script 標籤
+        const existingScript = document.getElementById('tappay-sdk');
+        if (existingScript) {
+          console.log('Waiting for existing TapPay script to load');
+          await new Promise(resolve => {
+            existingScript.addEventListener('load', resolve);
+          });
+          if (window.TPDirect?.card) {
+            setIsTapPayReady(true);
+            return;
+          }
+        }
+
+        console.log('Loading TapPay SDK');
         const script = document.createElement('script');
         script.src = 'https://js.tappaysdk.com/sdk/tpdirect/v5.19.2';
         script.async = true;
         script.crossOrigin = "anonymous";
+        script.id = 'tappay-sdk';
 
         const scriptLoadPromise = new Promise((resolve, reject) => {
           script.onload = resolve;
-          script.onerror = (error) => {
-            console.error('Failed to load TapPay SDK:', error);
-            reject(new Error('Failed to load TapPay SDK'));
-          };
+          script.onerror = reject;
         });
 
         document.body.appendChild(script);
         await scriptLoadPromise;
 
-        // Wait for TPDirect to be available
+        // 等待 TPDirect 可用
         let retries = 0;
-        while (!window.TPDirect && retries < 10) {
+        const maxRetries = 10;
+        while (!window.TPDirect && retries < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, 500));
           retries++;
         }
@@ -68,25 +83,62 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
           throw new Error('TapPay SDK not loaded after multiple retries');
         }
 
-        const appId = parseInt(import.meta.env.VITE_TAPPAY_APP_ID);
+        const appId = import.meta.env.VITE_TAPPAY_APP_ID;
         const appKey = import.meta.env.VITE_TAPPAY_APP_KEY;
-        
-        if (!appId || !appKey) {
-          throw new Error('TapPay credentials are missing or invalid');
-        }
 
-        window.TPDirect.setupSDK(appId, appKey, 'sandbox');
-        setIsTapPayReady(true);
+        // 詳細記錄初始化參數
+        console.log('=== TapPay SDK 初始化參數 ===');
+        console.log('App ID:', appId, typeof appId);
+        console.log('App Key:', appKey?.substring(0, 10) + '...');
+        console.log('Environment:', 'sandbox');
+
+        try {
+          // 確保 appId 是數字
+          const numericAppId = parseInt(appId, 10);
+          if (isNaN(numericAppId)) {
+            throw new Error('Invalid App ID format');
+          }
+
+          // 檢查 App Key 格式
+          if (!appKey?.startsWith('app_')) {
+            throw new Error('Invalid App Key format');
+          }
+
+          console.log('初始化 TapPay SDK 開始...');
+          window.TPDirect.setupSDK(
+            numericAppId,
+            appKey,
+            'sandbox'
+          );
+          
+          // 驗證初始化結果
+          if (!window.TPDirect.card) {
+            throw new Error('TapPay SDK initialization failed - card module not available');
+          }
+          
+          console.log('TapPay SDK 初始化成功');
+          if (isMounted) {
+            setIsTapPayReady(true);
+          }
+        } catch (error) {
+          console.error('TapPay SDK 初始化錯誤:', error);
+          setErrorMessage(`Payment system initialization failed: ${error.message}`);
+          return;
+        }
       } catch (error) {
         console.error('TapPay SDK initialization failed:', error);
-        setErrorMessage('Payment system initialization failed. Please try again later.');
+        if (isMounted) {
+          setErrorMessage('Payment system initialization failed. Please try again later.');
+        }
       }
     };
 
     loadTapPay();
 
     return () => {
-      // Do not remove the script on unmount to prevent reloading issues
+      isMounted = false;
+      setIsTapPayReady(false);
+      setupCompleted.current = false;
     };
   }, []);
 
@@ -94,73 +146,86 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
     if (selectedMethod === 'card' && isTapPayReady && !setupCompleted.current) {
       const setupCard = async () => {
         try {
-          // Wait for DOM elements to be ready
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // 等待 DOM 元素準備就緒
+          await new Promise(resolve => setTimeout(resolve, 500));
           
           const numberEl = document.getElementById('card-number');
           const expiryEl = document.getElementById('card-expiration-date');
           const ccvEl = document.getElementById('card-ccv');
 
           if (!numberEl || !expiryEl || !ccvEl) {
-            throw new Error('Card form elements not found');
+            console.error('找不到信用卡表單元素');
+            return;
           }
 
+          // 設置 TapPay Fields
           window.TPDirect.card.setup({
             fields: {
-              number: { 
+              number: {
                 element: '#card-number',
                 placeholder: '**** **** **** ****'
               },
-              expirationDate: { 
+              expirationDate: {
                 element: '#card-expiration-date',
                 placeholder: 'MM / YY'
               },
-              ccv: { 
+              ccv: {
                 element: '#card-ccv',
                 placeholder: 'CCV'
               }
             },
             styles: {
               'input': {
-                color: '#333333',
+                'color': '#333333',
                 'font-size': '16px',
                 'font-family': 'system-ui, -apple-system, sans-serif',
-                'line-height': '20px',
-                'font-weight': '400'
+                'font-weight': '400',
+                'line-height': '24px'
+              },
+              'input.ccv': {
+                'font-size': '16px'
               },
               ':focus': {
-                color: '#495057'
+                'color': '#495057'
               },
               '.valid': {
-                color: '#00C300'
+                'color': '#00C300'
               },
               '.invalid': {
-                color: '#dc3545'
+                'color': '#dc3545'
               }
             }
           });
 
-          window.TPDirect.card.onUpdate((update: any) => {
-            console.log('Card update:', update);
-            setIsCardValid(update.canGetPrime);
-            if (update.hasError) {
-              if (update.status.number === 2) {
-                setErrorMessage('Invalid card number');
-              } else if (update.status.expiry === 2) {
-                setErrorMessage('Invalid expiration date');
-              } else if (update.status.ccv === 2) {
-                setErrorMessage('Invalid CCV');
-              }
-            } else {
+          // 監聽信用卡欄位狀態變化
+          window.TPDirect.card.onUpdate(function(update) {
+            // 詳細記錄卡片狀態
+            console.log('卡片狀態更新:', {
+              canGetPrime: update.canGetPrime,
+              hasError: update.hasError,
+              status: update.status
+            });
+
+            if (update.canGetPrime) {
+              setIsCardValid(true);
               setErrorMessage('');
+            } else {
+              setIsCardValid(false);
+              // 顯示具體的錯誤信息
+              if (update.status.number === 2) {
+                setErrorMessage('卡號無效');
+              } else if (update.status.expiry === 2) {
+                setErrorMessage('有效期無效');
+              } else if (update.status.ccv === 2) {
+                setErrorMessage('安全碼無效');
+              }
             }
           });
 
           setupCompleted.current = true;
         } catch (error) {
-          console.error('Card setup error:', error);
-          setErrorMessage('Failed to initialize card form. Please refresh the page.');
-          setupCompleted.current = false;
+          console.error('設置信用卡表單時發生錯誤:', error);
+          setErrorMessage('初始化支付表單失敗，請刷新頁面重試');
         }
       };
 
@@ -169,73 +234,86 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
   }, [selectedMethod, isTapPayReady]);
 
   const handlePurchase = async () => {
-    if (selectedMethod === 'card' && !isCardValid) {
-      setErrorMessage('Please enter valid card details');
-      return;
-    }
-
-    setStatus('processing');
-    setErrorMessage('');
-
     try {
+      setStatus('processing');
+      setErrorMessage('');
+
       if (selectedMethod === 'card') {
-        const getPrimePromise = new Promise((resolve, reject) => {
-          window.TPDirect.card.getPrime((result: any) => {
-            if (result.status !== 0) {
-              reject(new Error(result.msg || 'Failed to get prime token'));
-            } else {
-              resolve(result.card.prime);
-            }
-          });
-        });
-
-        const prime = await getPrimePromise;
+        // 獲取 TapPay Prime
+        const tappayStatus = window.TPDirect.card.getTappayFieldsStatus();
         
-        console.log('Making payment request to:', `${import.meta.env.VITE_API_URL}/process-payment`);
-
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/process-payment`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
-          },
-          body: JSON.stringify({
-            prime,
-            amount: Math.round(pkg.price * 100),
-            details: `${pkg.name} - ${pkg.dataAmount}`,
-            currency: pkg.currency,
-          }),
+        console.log('支付狀態檢查:', {
+          canGetPrime: tappayStatus.canGetPrime,
+          hasError: tappayStatus.hasError,
+          status: tappayStatus.status
         });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('Payment request failed:', {
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries(response.headers.entries()),
-            error: errorData
+        if (!tappayStatus.canGetPrime) {
+          throw new Error('請確認信用卡資訊是否正確填寫');
+        }
+
+        try {
+          // 使用正確的 TapPay getPrime 回調方式
+          const prime = await new Promise((resolve, reject) => {
+            window.TPDirect.card.getPrime((result) => {
+              console.log('TapPay getPrime 完整結果:', result);
+              
+              if (result.status !== 0) {
+                reject(new Error(result.msg || '取得 prime 失敗'));
+                return;
+              }
+              
+              if (!result.card || !result.card.prime) {
+                reject(new Error('無法取得有效的 prime'));
+                return;
+              }
+              
+              resolve(result.card.prime);
+            });
           });
-          throw new Error(errorData.error || `Payment failed with status: ${response.status}`);
-        }
 
-        const data = await response.json();
-        if (!data.success) {
-          throw new Error(data.error || 'Payment failed');
-        }
+          console.log('成功獲取 prime:', prime);
 
-        setStatus('success');
-        console.log('Transaction ID:', data.transaction_id);
-        setTimeout(onPurchaseComplete, 3000);
+          // 發送支付請求到後端
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/process-payment`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+              'x-client-info': 'payment-client'
+            },
+            body: JSON.stringify({
+              prime,
+              amount: pkg.currency === 'USD' ? Math.round(pkg.price * 31 * 100) : Math.round(pkg.price * 100),
+              currency: 'TWD'
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.error('支付請求失敗:', errorData);
+            throw new Error(errorData.message || '支付處理失敗');
+          }
+
+          const responseData = await response.json();
+          console.log('支付處理成功:', responseData);
+
+          setStatus('success');
+          setTimeout(onPurchaseComplete, 3000);
+        } catch (error) {
+          console.error('支付處理錯誤:', error);
+          setErrorMessage(error.message || '支付處理時發生錯誤，請稍後再試');
+        }
       } else if (selectedMethod === 'linepay') {
         setStatus('success');
         setTimeout(onPurchaseComplete, 3000);
       }
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('購買處理錯誤:', error);
       setStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Payment failed. Please try again.');
+      setErrorMessage(error.message || '處理訂單時發生錯誤');
+    } finally {
+      setStatus('idle');
     }
   };
 
