@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Globe2, User, LogOut } from 'lucide-react';
+import { Menu, User, LogOut } from 'lucide-react';
 import { useStore } from '../store';
 import { translations } from '../i18n';
 
@@ -32,10 +32,41 @@ export function Header({ onMenuClick, onLogout }: HeaderProps) {
         <div className="flex items-center gap-2">
           <button 
             onClick={handleLanguageChange}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 rounded-full transition-all duration-200 active:scale-95"
             aria-label={language === 'en' ? '切換到中文' : 'Switch to English'}
           >
-            <Globe2 size={24} />
+            <svg 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              className="w-5 h-5"
+            >
+              <path
+                d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M3.6 9h16.8M3.6 15h16.8"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M12 3a15 15 0 0 1 0 18"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M12 3a15 15 0 0 0 0 18"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span className="text-sm font-medium">{language === 'en' ? 'English' : '中文'}</span>
           </button>
           
           {user ? (

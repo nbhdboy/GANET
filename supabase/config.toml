@@ -145,3 +145,6 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/process-payment/deno.json"
 entrypoint = "./functions/process-payment/index.ts"
+
+[functions.bind-card]
+verify_jwt = false

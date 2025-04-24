@@ -1,6 +1,6 @@
 import { type FC, useState, useEffect, useRef } from 'react';
 import { X, CreditCard, Wallet } from 'lucide-react';
-import type { ESIMPackage } from '../types';
+import type { ESIMPackage, SavedCard } from '../types';
 import { useStore } from '../store';
 import { translations } from '../i18n';
 import { LoadingOverlay } from './LoadingOverlay';
@@ -12,7 +12,7 @@ interface PaymentPageProps {
   onPurchaseComplete: () => void;
 }
 
-type PaymentMethod = 'card' | 'linepay';
+type PaymentMethod = 'card' | 'linepay' | 'saved_card';
 type PaymentStatus = 'idle' | 'processing' | 'success' | 'error';
 
 declare global {
@@ -22,14 +22,24 @@ declare global {
 }
 
 export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPurchaseComplete }) => {
-  const { language } = useStore();
+  const { language, user } = useStore();
   const t = translations[language];
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('card');
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('saved_card');
+  const [selectedCard, setSelectedCard] = useState<SavedCard | null>(null);
   const [status, setStatus] = useState<PaymentStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isCardValid, setIsCardValid] = useState(false);
   const [isTapPayReady, setIsTapPayReady] = useState(false);
   const setupCompleted = useRef(false);
+
+  useEffect(() => {
+    if (user?.savedCards?.length > 0) {
+      setSelectedCard(user.savedCards[0]);
+      setSelectedMethod('saved_card');
+    } else {
+      setSelectedMethod('card');
+    }
+  }, [user?.savedCards]);
 
   useEffect(() => {
     let isMounted = true;
@@ -238,7 +248,31 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
       setStatus('processing');
       setErrorMessage('');
 
-      if (selectedMethod === 'card') {
+      if (selectedMethod === 'saved_card' && selectedCard) {
+        // 使用已儲存的卡片進行付款
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/process-payment`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'x-client-info': 'payment-client'
+          },
+          body: JSON.stringify({
+            cardId: selectedCard.id,
+            amount: pkg.currency === 'USD' ? Math.round(pkg.price * 31 * 100) : Math.round(pkg.price * 100),
+            currency: 'TWD'
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('付款處理失敗');
+        }
+
+        setStatus('success');
+        setTimeout(() => {
+          onPurchaseComplete();
+        }, 2000);
+      } else if (selectedMethod === 'card') {
         // 獲取 TapPay Prime
         const tappayStatus = window.TPDirect.card.getTappayFieldsStatus();
         
@@ -299,21 +333,28 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
           console.log('支付處理成功:', responseData);
 
           setStatus('success');
-          setTimeout(onPurchaseComplete, 3000);
+          // 延長成功狀態的顯示時間
+          setTimeout(() => {
+            setStatus('idle');
+            onPurchaseComplete();
+          }, 5000); // 從 3000ms 改為 5000ms
         } catch (error) {
           console.error('支付處理錯誤:', error);
           setErrorMessage(error.message || '支付處理時發生錯誤，請稍後再試');
+          setStatus('error');
         }
       } else if (selectedMethod === 'linepay') {
         setStatus('success');
-        setTimeout(onPurchaseComplete, 3000);
+        // 延長成功狀態的顯示時間
+        setTimeout(() => {
+          setStatus('idle');
+          onPurchaseComplete();
+        }, 5000); // 從 3000ms 改為 5000ms
       }
     } catch (error) {
-      console.error('購買處理錯誤:', error);
+      console.error('付款處理錯誤:', error);
       setStatus('error');
-      setErrorMessage(error.message || '處理訂單時發生錯誤');
-    } finally {
-      setStatus('idle');
+      setErrorMessage(error instanceof Error ? error.message : '付款處理失敗');
     }
   };
 
@@ -336,6 +377,51 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
             </div>
 
             <div className="space-y-4">
+              {user?.savedCards?.length > 0 && (
+                <div 
+                  className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                    selectedMethod === 'saved_card' 
+                      ? 'border-line bg-line/5' 
+                      : 'border-gray-200 hover:border-line/50'
+                  }`}
+                  onClick={() => setSelectedMethod('saved_card')}
+                >
+                  <div className="flex items-center gap-3">
+                    <CreditCard className={selectedMethod === 'saved_card' ? 'text-line' : 'text-gray-500'} size={24} />
+                    <div>
+                      <p className="font-medium">{t.savedCards}</p>
+                      <p className="text-sm text-gray-500">{t.selectSavedCard}</p>
+                    </div>
+                  </div>
+
+                  {selectedMethod === 'saved_card' && (
+                    <div className="mt-4 space-y-2">
+                      {user.savedCards.map(card => (
+                        <div
+                          key={card.id}
+                          className={`p-3 rounded-lg cursor-pointer transition-all ${
+                            selectedCard?.id === card.id
+                              ? 'bg-line/10 border-line'
+                              : 'bg-gray-50 border-transparent'
+                          }`}
+                          onClick={() => setSelectedCard(card)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-line">{card.brand}</span>
+                              <span>•••• {card.last4}</span>
+                            </div>
+                            <span className="text-sm text-gray-500">
+                              {card.expiryMonth}/{card.expiryYear}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div 
                 className={`p-4 border rounded-lg cursor-pointer transition-all ${
                   selectedMethod === 'card' 
@@ -356,20 +442,20 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
                   <div className="card-form mt-4">
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Card Number
+                        {t.cardNumber}
                       </label>
                       <div id="card-number" className="h-10 bg-white border border-gray-300 rounded-lg overflow-hidden"></div>
                     </div>
                     <div className="flex gap-4">
                       <div className="flex-1">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Expiry Date
+                          {t.expiryDate}
                         </label>
                         <div id="card-expiration-date" className="h-10 bg-white border border-gray-300 rounded-lg overflow-hidden"></div>
                       </div>
                       <div className="w-32">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          CCV
+                          {t.cvv}
                         </label>
                         <div id="card-ccv" className="h-10 bg-white border border-gray-300 rounded-lg overflow-hidden"></div>
                       </div>
@@ -416,7 +502,9 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
           <div className="p-6">
             <button
               onClick={handlePurchase}
-              disabled={status !== 'idle' || (selectedMethod === 'card' && !isCardValid)}
+              disabled={status !== 'idle' || 
+                (selectedMethod === 'card' && !isCardValid) ||
+                (selectedMethod === 'saved_card' && !selectedCard)}
               className="w-full bg-line-gradient hover:bg-line-gradient-hover text-white py-3 rounded-full transition-all font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CreditCard size={20} />

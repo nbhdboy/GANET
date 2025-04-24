@@ -1,3 +1,52 @@
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Environment variables
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Supabase
+/supabase/.temp
+/supabase/.branches
+/supabase/.temp/
+/supabase/.branches/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build / Generate output
+dist
+build
+.next
+out
+coverage
+
+# Misc
+*.log
+*.cache
+.cache
+.temp

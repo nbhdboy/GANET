@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Signal, Calendar } from 'lucide-react';
+import { Signal, Calendar, Plus } from 'lucide-react';
 import type { ESIMPackage } from '../types';
 import { useStore } from '../store';
 import { translations } from '../i18n';
@@ -11,6 +11,7 @@ interface PackageCardProps {
     expiryDate?: string;
     usedData?: string;
     totalData?: string;
+    topUpCount?: number;
   };
   onSelect: (pkg: ESIMPackage) => void;
   isPurchased?: boolean;
@@ -19,6 +20,20 @@ interface PackageCardProps {
 export function PackageCard({ package: pkg, onSelect, isPurchased }: PackageCardProps) {
   const { language } = useStore();
   const t = translations[language];
+
+  // 格式化數據顯示
+  const formatDataAmount = (amount: string) => {
+    if (!amount) return '';
+    if (amount.toLowerCase().includes('unlimited')) return t.unlimited;
+    return amount;
+  };
+
+  // 格式化有效期顯示
+  const formatValidity = (validity: string) => {
+    if (!validity) return '';
+    const days = validity.replace(' days', '');
+    return `${days} ${t.days}`;
+  };
 
   const renderUsageGraph = () => {
     const used = parseFloat(pkg.usedData || '0');
@@ -66,74 +81,93 @@ export function PackageCard({ package: pkg, onSelect, isPurchased }: PackageCard
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Globe className="text-line" size={32} />
-            <img
-              src={`https://flagcdn.com/${pkg.countryCode.toLowerCase()}.svg`}
-              alt={pkg.country}
-              className="w-4 h-4 absolute -bottom-1 -right-1"
-            />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold">{pkg.country}</h3>
-            <p className="text-sm text-gray-500">{pkg.name}</p>
-          </div>
+    <div 
+      className="bg-white rounded-2xl p-6 shadow-card hover:shadow-lg transition-shadow duration-300 cursor-pointer"
+      onClick={() => onSelect(pkg)}
+    >
+      <div className="flex items-center gap-4 mb-4">
+        <div className="relative w-12 h-8 bg-white rounded-xl overflow-hidden shadow-sm p-0.5">
+          <img
+            src={`https://flagcdn.com/${pkg.countryCode.toLowerCase()}.svg`}
+            alt={pkg.country}
+            className="w-full h-full object-cover"
+            style={{
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
+              imageRendering: 'crisp-edges'
+            }}
+          />
         </div>
-        {renderStatus()}
+        <div>
+          <h3 className="text-xl font-bold">{pkg.country}</h3>
+          <p className="text-gray-500">{pkg.name}</p>
+        </div>
+        {isPurchased && pkg.status === 'active' && (
+          <span className="ml-auto px-3 py-1 bg-green-50 text-green-600 rounded-full text-sm">
+            {t.active}
+          </span>
+        )}
       </div>
 
-      {isPurchased && pkg.totalData && renderUsageGraph()}
-      
-      <div className="space-y-3 text-gray-600 mb-4">
-        <div className="flex items-center gap-2">
-          <Signal size={18} className="text-line" />
-          <p>{t.data}: {pkg.dataAmount}</p>
+      <div className="space-y-3 mb-6">
+        <div className="flex items-center gap-3">
+          <Signal className="text-line" size={24} />
+          <div>
+            <p className="text-gray-600">{t.data}</p>
+            <p className="text-lg font-semibold">
+              {formatDataAmount(isPurchased ? pkg.totalData || pkg.dataAmount : pkg.dataAmount)}
+            </p>
+          </div>
+          {isPurchased && pkg.usedData && (
+            <div className="ml-auto text-right">
+              <p className="text-gray-600">{t.used}</p>
+              <p className="text-lg font-semibold">{pkg.usedData}</p>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <Calendar size={18} className="text-line" />
-          <p>{t.validity}: {pkg.validity}</p>
+
+        <div className="flex items-center gap-3">
+          <Calendar className="text-line" size={24} />
+          <div>
+            <p className="text-gray-600">{t.validity}</p>
+            <p className="text-lg font-semibold">
+              {formatValidity(pkg.validity)}
+            </p>
+          </div>
+          {isPurchased && pkg.expiryDate && (
+            <div className="ml-auto text-right">
+              <p className="text-gray-600">{t.expiry}</p>
+              <p className="text-lg font-semibold">{pkg.expiryDate}</p>
+            </div>
+          )}
         </div>
-        {pkg.description && (
-          <p className="text-sm text-gray-500">{pkg.description}</p>
-        )}
-        {isPurchased && pkg.status && (
-          <>
-            {pkg.activationDate && (
-              <p className="text-sm">
-                {t.activatedOn}: {new Date(pkg.activationDate).toLocaleDateString()}
+
+        {isPurchased && (
+          <div className="flex items-center gap-3">
+            <Plus className="text-line" size={24} />
+            <div>
+              <p className="text-gray-600">{t.topUpCount || '加購次數'}</p>
+              <p className="text-lg font-semibold">
+                {pkg.topUpCount ? `x${pkg.topUpCount}` : '0'}
               </p>
-            )}
-            {pkg.expiryDate && (
-              <p className="text-sm">
-                {t.expiresOn}: {new Date(pkg.expiryDate).toLocaleDateString()}
-              </p>
-            )}
-          </>
+            </div>
+          </div>
         )}
       </div>
-      
-      <div className="mt-4">
-        <div className="text-2xl font-bold text-line mb-3">
-          {pkg.currency} {pkg.price}
-        </div>
-        <div className="flex gap-2">
+
+      <div className="mt-6 pt-4 border-t border-gray-100">
+        <div className="flex justify-between items-center">
+          <span className="text-2xl font-bold text-line">
+            {pkg.currency} {pkg.price}
+          </span>
           <button 
-            onClick={() => onSelect(pkg)}
-            className="flex-1 bg-line-gradient hover:bg-line-gradient-hover text-white px-6 py-2 rounded-full transition-colors font-medium"
+            className="bg-button-gradient hover:bg-button-gradient-hover text-white px-6 py-2 rounded-full transition-all duration-300 shadow-button hover:shadow-lg"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(pkg);
+            }}
           >
             {isPurchased ? t.viewDetails : t.select}
           </button>
-          {isPurchased && (
-            <button 
-              onClick={() => onSelect(pkg)}
-              className="flex-1 bg-line-gradient hover:bg-line-gradient-hover text-white px-6 py-2 rounded-full transition-colors font-medium"
-            >
-              {t.topUp}
-            </button>
-          )}
         </div>
       </div>
     </div>
