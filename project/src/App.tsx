@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { PackageCard } from './components/PackageCard';
 import { BottomNav } from './components/BottomNav';
@@ -16,6 +16,16 @@ import { translations } from './i18n';
 import { PACKAGES } from './data/packages';
 import type { ESIMPackage, UserProfile, PackageData } from './types';
 import PackageList from './components/PackageList';
+import { Profile } from './components/Profile';
+import { fetchAiraloPackages, parseAiraloPackages, CountryPackageSummary, groupByCountry } from './data/packages';
+import { ALLOWED_COUNTRY_CODES } from './data/allowedCountryCodes';
+
+// eSIM usage 快取型別
+type EsimUsage = {
+  status: string;
+  remaining: number;
+  expired_at?: string;
+};
 
 function App() {
   const { language, setUser, user } = useStore();
@@ -44,10 +54,41 @@ function App() {
   const [discountedPrice, setDiscountedPrice] = useState<number | null>(null);
   const t = translations[language];
 
+  // 新增：API 動態資料
+  const [countryPackages, setCountryPackages] = useState<CountryPackageSummary[]>([]);
+  const [rawApiData, setRawApiData] = useState<any>(null); // 保存 API 原始資料
+  const [selectedCountryPackages, setSelectedCountryPackages] = useState<any[]>([]); // 保存選中國家的所有細分方案
+  const [loading, setLoading] = useState(true);
+
+  // eSIM usage 狀態快取
+  const [usageMap, setUsageMap] = useState<Record<string, EsimUsage>>({});
+  const usageFetchedRef = useRef(false);
+
+  // 新增 loadingPackageList 狀態
+  const [loadingPackageList, setLoadingPackageList] = useState(false);
+
+  useEffect(() => {
+    async function loadPackages() {
+      setLoading(true);
+      // 直接拿 DB 查詢的細分專案陣列
+      const allPackages = await fetchAiraloPackages();
+      setRawApiData(allPackages); // 保存原始細分專案陣列
+      // 前端 groupByCountry 彙總顯示首頁
+      const grouped = groupByCountry(allPackages);
+      // 依照 ALLOWED_COUNTRY_CODES 順序排序
+      const sorted = ALLOWED_COUNTRY_CODES
+        .map(code => grouped.find(pkg => pkg.countryCode === code))
+        .filter(Boolean);
+      setCountryPackages(sorted);
+      setLoading(false);
+    }
+    loadPackages();
+  }, []);
+
   // Mock login/logout functions
   const handleLogin = () => {
     const mockUser: UserProfile = {
-      userId: 'mock-user-id',
+      userId: 'test_user_001',
       displayName: 'Demo User',
       pictureUrl: 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=100&h=100&fit=crop',
       language: language as 'en' | 'zh' | 'zh-TW',
@@ -61,6 +102,7 @@ function App() {
   };
   
   const handlePackageSelect = (pkg: ESIMPackage) => {
+    console.log('[LOG] handlePackageSelect', pkg);
     if (!user) {
       handleLogin();
       return;
@@ -69,24 +111,16 @@ function App() {
     setShowPackageList(true);
   };
 
-  const handlePackageConfirm = (pkg: PackageData | null) => {
+  const handlePackageConfirm = (pkg: ESIMPackage | null) => {
+    console.log('[LOG] handlePackageConfirm', pkg);
     if (pkg === null) {
       setShowPackageList(false);
       setSelectedPackage(null);
       return;
     }
-
-    if (selectedPackage) {
-      const updatedPackage: ESIMPackage = {
-        ...selectedPackage,
-        dataAmount: pkg.data === 'unlimited' ? 'Unlimited' : pkg.data,
-        validity: `${pkg.validity} days`,
-        price: parseFloat(pkg.price),
-      };
-      setSelectedPackage(updatedPackage);
-      setShowPackageList(false);
-      setShowPackageConfirmation(true);
-    }
+    setSelectedPackage(pkg);
+    setShowPackageList(false);
+    setShowPackageConfirmation(true);
   };
 
   const handleConfirmationBack = () => {
@@ -107,13 +141,15 @@ function App() {
     }
   };
 
-  const handleConfirmationProceed = (finalPrice: number) => {
-    setDiscountedPrice(finalPrice);
+  const handleConfirmationProceed = (pkg: ESIMPackage) => {
+    console.log('[LOG] handleConfirmationProceed', pkg);
+    setSelectedPackage(pkg);
     setShowPackageConfirmation(false);
     setShowPayment(true);
   };
 
   const handlePaymentBack = () => {
+    console.log('[LOG] handlePaymentBack', selectedPackage);
     if (isTopUpFlow) {
       // 加購流程：返回詳細頁面，保持原始 eSIM 資訊
       const originalEsim = purchasedEsims.find(esim => esim.id === selectedPackage?.id);
@@ -170,7 +206,8 @@ function App() {
     ];
   };
 
-  const handlePurchaseComplete = () => {
+  const handlePurchaseComplete = (iccid?: string) => {
+    console.log('[LOG] handlePurchaseComplete', selectedPackage, user);
     if (selectedPackage) {
       if (isTopUpFlow) {
         // 找到原始的 eSIM
@@ -181,7 +218,7 @@ function App() {
           // 更新加購專案列表
           const newAddOnPackage = {
             dataAmount: selectedPackage.dataAmount,
-            validity: selectedPackage.validity
+            validity: String(parseInt(selectedPackage.validity))
           };
           
           // 更新 eSIM
@@ -199,20 +236,37 @@ function App() {
             })(),
             // 更新有效期
             validity: (() => {
-              const originalValidity = parseInt(originalEsim.validity.replace(' days', ''));
-              const topUpValidity = parseInt(selectedPackage.validity.replace(' days', ''));
+              const originalValidity = parseInt(
+                typeof originalEsim.validity === 'string'
+                  ? originalEsim.validity.replace(' days', '')
+                  : originalEsim.validity
+              );
+              const topUpValidity = parseInt(
+                typeof selectedPackage.validity === 'string'
+                  ? selectedPackage.validity.replace(' days', '')
+                  : selectedPackage.validity
+              );
               return `${originalValidity + topUpValidity} days`;
             })(),
             // 更新總價格
-            price: originalEsim.price + (discountedPrice || selectedPackage.price),
+            price: Number((originalEsim.price + (discountedPrice || selectedPackage.price)).toFixed(1)),
             // 更新到期日
             expiryDate: (() => {
-              const originalValidity = parseInt(originalEsim.validity.replace(' days', ''));
-              const topUpValidity = parseInt(selectedPackage.validity.replace(' days', ''));
+              const originalValidity = parseInt(
+                typeof originalEsim.validity === 'string'
+                  ? originalEsim.validity.replace(' days', '')
+                  : originalEsim.validity
+              );
+              const topUpValidity = parseInt(
+                typeof selectedPackage.validity === 'string'
+                  ? selectedPackage.validity.replace(' days', '')
+                  : selectedPackage.validity
+              );
               return new Date(Date.now() + (originalValidity + topUpValidity) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
             })(),
             // 更新加購次數
-            topUpCount: (originalEsim.topUpCount || 0) + 1
+            topUpCount: (originalEsim.topUpCount || 0) + 1,
+            iccid: iccid || originalEsim.iccid
           };
           
           // 更新 purchasedEsims 陣列
@@ -234,9 +288,10 @@ function App() {
           usedData: '0 MB',
           totalData: selectedPackage.dataAmount,
           addOnPackages: [],
-          topUpCount: 0 // 初始化加購次數為 0
+          topUpCount: 0, // 初始化加購次數為 0
+          iccid: iccid
         };
-        setPurchasedEsims([...purchasedEsims, newEsim]);
+        setPurchasedEsims([newEsim, ...purchasedEsims]);
         setSelectedPackage(null);
       }
     }
@@ -389,73 +444,95 @@ function App() {
     </div>
   );
 
-  const renderMyEsims = () => (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold bg-line-gradient bg-clip-text text-transparent">
-          {t.myEsims}
-        </h2>
-        <button
-          onClick={() => setShowInstallInstructions(true)}
-          className="bg-button-gradient hover:bg-button-gradient-hover text-white px-6 py-3 rounded-full transition-all duration-300 shadow-button hover:shadow-lg"
-        >
-          {t.installInstructions}
-        </button>
-      </div>
+  // 進入「我的 eSIM」頁時批次查詢 usage 狀態
+  useEffect(() => {
+    if (activeTab !== 'esims' || usageFetchedRef.current) return;
+    if (!purchasedEsims || purchasedEsims.length === 0) return;
+    usageFetchedRef.current = true;
+    const fetchAllUsage = async () => {
+      const newUsageMap: Record<string, EsimUsage> = {};
+      for (const esim of purchasedEsims) {
+        if (!esim.iccid) continue;
+        try {
+          const cacheKey = `__esim_usage_cache_${esim.iccid}`;
+          const cache = window.localStorage.getItem(cacheKey);
+          let usage: EsimUsage | null = null;
+          if (cache) {
+            const parsed = JSON.parse(cache);
+            if (Date.now() - parsed.ts < 15 * 60 * 1000) {
+              usage = parsed.data;
+            }
+          }
+          if (!usage) {
+            const res = await fetch(`https://lcfsxxncgqrhjtbfmtig.supabase.co/functions/v1/airalo-get-usage?iccid=${esim.iccid}`);
+            const json = await res.json();
+            if (json.data) {
+              usage = {
+                status: json.data.status,
+                remaining: json.data.remaining,
+                expired_at: json.data.expired_at,
+              };
+              window.localStorage.setItem(cacheKey, JSON.stringify({ data: usage, ts: Date.now() }));
+            }
+          }
+          if (usage) newUsageMap[esim.iccid] = usage;
+        } catch {}
+      }
+      setUsageMap(newUsageMap);
+    };
+    fetchAllUsage();
+  }, [activeTab, purchasedEsims]);
 
-      <div className="flex gap-4">
-        <button
-          onClick={() => setEsimTab('current')}
-          className={`flex-1 py-3 text-center rounded-full font-medium transition-all duration-300 ${
-            esimTab === 'current'
-              ? 'bg-button-gradient text-white shadow-button'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          {t.currentEsims}
-        </button>
-        <button
-          onClick={() => setEsimTab('archived')}
-          className={`flex-1 py-3 text-center rounded-full font-medium transition-all duration-300 ${
-            esimTab === 'archived'
-              ? 'bg-button-gradient text-white shadow-button'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          {t.archivedEsims}
-        </button>
-      </div>
+  // 合併 usage 狀態進每個 package
+  const mergedEsims = purchasedEsims.map(esim => {
+    if (!esim.iccid) return esim;
+    const usage = usageMap[esim.iccid];
+    return usage
+      ? { ...esim, status: usage.status, remaining: usage.remaining, expired_at: usage.expired_at }
+      : esim;
+  });
 
-      {user ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {purchasedEsims.length > 0 ? (
-            purchasedEsims.map((esim) => (
-              <PackageCard 
-                key={esim.id}
-                package={esim}
-                onSelect={handleViewDetails}
-                isPurchased
-              />
-            ))
-          ) : (
-            <div className="col-span-full text-center py-12 bg-card-gradient rounded-2xl shadow-card">
-              <p className="text-gray-600 text-lg">{t.noEsimsPurchased}</p>
-            </div>
-          )}
+  const renderMyEsims = () => {
+    // 直接平鋪所有已購買的 eSIM，不分國家卡片
+    if (!mergedEsims || mergedEsims.length === 0) {
+      return <div className="text-center text-gray-400 py-8">尚未購買 eSIM</div>;
+    }
+    return (
+      <div className="space-y-8">
+        <div className="flex justify-between items-center">
+          <h2 className="text-3xl font-bold bg-line-gradient bg-clip-text text-transparent">
+            {t.myEsims}
+          </h2>
         </div>
-      ) : (
-        <div className="text-center py-12 bg-card-gradient rounded-2xl shadow-card">
-          <p className="text-gray-600 text-lg mb-6">{t.loginToViewEsims}</p>
+        {/* 分頁 tab */}
+        <div className="flex gap-4 mb-4">
           <button
-            onClick={handleLogin}
-            className="bg-button-gradient hover:bg-button-gradient-hover text-white px-8 py-3 rounded-full transition-all duration-300 shadow-button hover:shadow-lg"
+            className={`px-4 py-2 rounded-full font-semibold ${esimTab === 'current' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+            onClick={() => setEsimTab('current')}
           >
-            {t.login}
+            {t.currentEsims || '目前 eSIM'}
+          </button>
+          <button
+            className={`px-4 py-2 rounded-full font-semibold ${esimTab === 'archived' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+            onClick={() => setEsimTab('archived')}
+          >
+            {t.archivedEsims || '已封存 eSIM'}
           </button>
         </div>
-      )}
-    </div>
-  );
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {mergedEsims.map(esim => (
+            <PackageCard
+              key={esim.iccid || esim.id}
+              package={esim}
+              onSelect={handleViewDetails}
+              isPurchased
+              onShowInstallInstructions={handleShowInstallInstructions}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -467,7 +544,17 @@ function App() {
             <h2 className="text-2xl font-bold bg-line-gradient bg-clip-text text-transparent mb-4">
               {t.memberProfile}
             </h2>
-            {user ? renderProfile() : (
+            {user ? (
+              <Profile 
+                onAddCard={() => {
+                  setShowSaveCard(true);
+                  console.log('App setShowSaveCard(true)');
+                }}
+                onShowTerms={() => setShowTerms(true)}
+                onShowPrivacy={() => setShowPrivacyPolicy(true)}
+                onShowFAQ={() => setShowFAQ(true)}
+              />
+            ) : (
               <div className="text-center py-8">
                 <p className="text-gray-600 mb-4">{t.loginToViewProfile}</p>
                 <button
@@ -504,18 +591,120 @@ function App() {
             )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {PACKAGES.map(pkg => (
-                <PackageCard 
-                  key={pkg.id}
-                  package={pkg}
-                  onSelect={handlePackageSelect}
-                />
+              {countryPackages.map(pkg => (
+                <div
+                  key={pkg.countryCode}
+                  className="bg-white rounded-2xl p-6 shadow-card hover:shadow-lg transition-shadow duration-300 cursor-pointer"
+                  onClick={() => {
+                    console.log('[LOG] 點擊卡片', pkg);
+                    setSelectedPackage(pkg);
+                    setLoadingPackageList(true);
+                    setSelectedCountryPackages([]);
+                    setTimeout(() => {
+                      console.log('[LOG] setShowPackageList(true)');
+                      setShowPackageList(true);
+                    }, 0);
+                  }}
+                >
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="relative w-10 h-8 bg-white rounded-xl overflow-hidden shadow-sm p-0.5">
+                      <img
+                        src={`https://flagcdn.com/${pkg.countryCode.toLowerCase()}.svg`}
+                        alt={pkg.country}
+                        className="w-full h-full object-cover"
+                        style={{
+                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
+                          imageRendering: 'crisp-edges'
+                        }}
+                      />
+                    </div>
+                    <h3 className="text-xl font-bold">{pkg.country}</h3>
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-gray-600">數據區間：</span>
+                    <span className="font-medium">{pkg.dataRange ?? '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-gray-600">有效期間：</span>
+                    <span className="font-medium">{pkg.validityRange ?? '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-gray-600">電信商：</span>
+                    <span className="font-medium">{Array.isArray(pkg.operators) && pkg.operators.length > 0 ? pkg.operators.join('、') : '—'}</span>
+                  </div>
+                  {/* 社群/導航/影音區塊 */}
+                  <div className="flex flex-col gap-1 ml-2">
+                    <div className="flex items-center gap-1">
+                      <img src="https://www.svgrepo.com/show/452229/instagram-1.svg" alt="Instagram" className="w-4 h-4" />
+                      <span className="text-xs text-gray-600">可上傳圖片貼文：350~1050</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <img src="https://www.svgrepo.com/show/452196/facebook-1.svg" alt="Facebook" className="w-4 h-4" />
+                      <span className="text-xs text-gray-600">可上傳圖片貼文：250~750</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/threads.svg" alt="Threads" className="w-4 h-4" />
+                      <span className="text-xs text-gray-600">可上傳圖片貼文：330~990</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <img src="https://icons.iconarchive.com/icons/dtafalonso/android-lollipop/512/Maps-icon.png" alt="Google Maps" className="w-4 h-4" />
+                      <span className="text-xs text-gray-600">可使用導航時間：200~600小時</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <img src="https://upload.wikimedia.org/wikipedia/commons/4/42/YouTube_icon_%282013-2017%29.png" alt="YouTube" className="w-4 h-4" />
+                      <span className="text-xs text-gray-600">可觀看時間：3~9小時 (360p標準畫質)</span>
+                    </div>
+                  </div>
+                  <button className="mt-4 w-full bg-[#4CD964] text-white py-2 rounded-lg font-bold hover:bg-[#43c05c] transition">
+                    選擇
+                  </button>
+                </div>
               ))}
             </div>
           </>
         );
     }
   };
+
+  const [installIccid, setInstallIccid] = useState<string | undefined>(undefined);
+  const handleShowInstallInstructions = (iccid?: string) => {
+    setInstallIccid(iccid);
+    setShowInstallInstructions(true);
+  };
+
+  // useEffect 只依賴 showPackageList 和 selectedPackage
+  useEffect(() => {
+    if (showPackageList && selectedPackage) {
+      console.log('[LOG] useEffect 觸發 fetch，showPackageList:', showPackageList, 'selectedPackage:', selectedPackage);
+      setLoadingPackageList(true);
+      const start = Date.now();
+      (async () => {
+        try {
+          console.log('[LOG] fetch 前，loadingPackageList:', loadingPackageList);
+          // 改用快取 function
+          const countryPackages = await fetchAiraloPackages(selectedPackage.countryCode);
+          setSelectedCountryPackages(countryPackages);
+          console.log('[LOG] fetch 完成，countryPackages:', countryPackages);
+        } catch (e) {
+          setSelectedCountryPackages([]);
+          console.log('[LOG] fetch 失敗', e);
+        }
+        const elapsed = Date.now() - start;
+        const minLoading = 500;
+        if (elapsed < minLoading) {
+          setTimeout(() => {
+            setLoadingPackageList(false);
+            console.log('[LOG] setLoadingPackageList(false) (延遲)');
+          }, minLoading - elapsed);
+        } else {
+          setLoadingPackageList(false);
+          console.log('[LOG] setLoadingPackageList(false)');
+        }
+      })();
+    }
+  }, [showPackageList, selectedPackage]);
+
+  if (loading) return <div>載入中...</div>;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -526,73 +715,7 @@ function App() {
       
       <main className="container mx-auto px-4 pt-20 pb-24">
         <div className="max-w-7xl mx-auto">
-          {activeTab === 'esims' ? (
-            <div className="space-y-8">
-              <div className="flex justify-between items-center">
-                <h2 className="text-3xl font-bold bg-line-gradient bg-clip-text text-transparent">
-                  {t.myEsims}
-                </h2>
-                <button
-                  onClick={() => setShowInstallInstructions(true)}
-                  className="bg-button-gradient hover:bg-button-gradient-hover text-white px-6 py-3 rounded-full transition-all duration-300 shadow-button hover:shadow-lg"
-                >
-                  {t.installInstructions}
-                </button>
-              </div>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setEsimTab('current')}
-                  className={`flex-1 py-3 text-center rounded-full font-medium transition-all duration-300 ${
-                    esimTab === 'current'
-                      ? 'bg-button-gradient text-white shadow-button'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {t.currentEsims}
-                </button>
-                <button
-                  onClick={() => setEsimTab('archived')}
-                  className={`flex-1 py-3 text-center rounded-full font-medium transition-all duration-300 ${
-                    esimTab === 'archived'
-                      ? 'bg-button-gradient text-white shadow-button'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {t.archivedEsims}
-                </button>
-              </div>
-
-              {user ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {purchasedEsims.length > 0 ? (
-                    purchasedEsims.map((esim) => (
-                      <PackageCard 
-                        key={esim.id}
-                        package={esim}
-                        onSelect={handleViewDetails}
-                        isPurchased
-                      />
-                    ))
-                  ) : (
-                    <div className="col-span-full text-center py-12 bg-card-gradient rounded-2xl shadow-card">
-                      <p className="text-gray-600 text-lg">{t.noEsimsPurchased}</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-12 bg-card-gradient rounded-2xl shadow-card">
-                  <p className="text-gray-600 text-lg mb-6">{t.loginToViewEsims}</p>
-                  <button
-                    onClick={handleLogin}
-                    className="bg-button-gradient hover:bg-button-gradient-hover text-white px-8 py-3 rounded-full transition-all duration-300 shadow-button hover:shadow-lg"
-                  >
-                    {t.login}
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : renderContent()}
+          {activeTab === 'esims' ? renderMyEsims() : renderContent()}
         </div>
       </main>
 
@@ -606,7 +729,10 @@ function App() {
           onClose={() => {
             setShowPackageList(false);
             setSelectedPackage(null);
+            setSelectedCountryPackages([]);
           }}
+          packages={selectedCountryPackages}
+          loading={loadingPackageList}
         />
       )}
 
@@ -639,19 +765,20 @@ function App() {
           }}
           onPurchaseConfirm={handleTopUpConfirm}
           onTabChange={setActiveTab}
+          onShowInstallInstructions={handleShowInstallInstructions}
         />
       )}
 
-      {showSaveCard && (
         <SaveCardPage
+        show={showSaveCard}
           onClose={() => setShowSaveCard(false)}
           onSave={() => setShowSaveCard(false)}
         />
-      )}
 
       {showInstallInstructions && (
         <InstallInstructions
           onBack={() => setShowInstallInstructions(false)}
+          iccid={installIccid}
         />
       )}
 

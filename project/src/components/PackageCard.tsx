@@ -12,12 +12,14 @@ interface PackageCardProps {
     usedData?: string;
     totalData?: string;
     topUpCount?: number;
+    iccid?: string;
   };
   onSelect: (pkg: ESIMPackage) => void;
   isPurchased?: boolean;
+  onShowInstallInstructions?: (iccid?: string) => void;
 }
 
-export function PackageCard({ package: pkg, onSelect, isPurchased }: PackageCardProps) {
+export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstallInstructions }: PackageCardProps) {
   const { language } = useStore();
   const t = translations[language];
 
@@ -31,8 +33,12 @@ export function PackageCard({ package: pkg, onSelect, isPurchased }: PackageCard
   // 格式化有效期顯示
   const formatValidity = (validity: string) => {
     if (!validity) return '';
-    const days = validity.replace(' days', '');
-    return `${days} ${t.days}`;
+    // 若為中文語系，去除 days 與多餘單位
+    if (language === 'zh' || language === 'zh-TW') {
+      return validity.replace(/\s*days?/, '') + '天';
+    }
+    // 其他語系保留原本格式
+    return validity;
   };
 
   const renderUsageGraph = () => {
@@ -97,18 +103,35 @@ export function PackageCard({ package: pkg, onSelect, isPurchased }: PackageCard
             }}
           />
         </div>
-        <div>
+        <div className="flex items-center gap-2">
           <h3 className="text-xl font-bold">{pkg.country}</h3>
-          <p className="text-gray-500">{pkg.name}</p>
+          {pkg.status && (
+            <span className={`ml-2 px-3 py-0.5 rounded-full text-sm font-semibold align-middle
+              ${(pkg.status && pkg.status.toLowerCase() === 'active') ? 'bg-green-100 text-green-700'
+                : (pkg.status && pkg.status.toLowerCase() === 'not_active') ? 'bg-yellow-100 text-yellow-700'
+                : (pkg.status && pkg.status.toLowerCase() === 'expired') ? 'bg-gray-200 text-gray-600'
+                : (pkg.status && pkg.status.toLowerCase() === 'finished') ? 'bg-gray-200 text-gray-600'
+                : 'bg-gray-200 text-gray-600'}`}>
+              {(pkg.status && pkg.status.toLowerCase() === 'active') ? '啟動中'
+                : (pkg.status && pkg.status.toLowerCase() === 'not_active') ? '尚未啟用'
+                : (pkg.status && pkg.status.toLowerCase() === 'expired') ? '已過期'
+                : (pkg.status && pkg.status.toLowerCase() === 'finished') ? '已用完'
+                : pkg.status}
+            </span>
+          )}
         </div>
-        {isPurchased && pkg.status === 'active' && (
-          <span className="ml-auto px-3 py-1 bg-green-50 text-green-600 rounded-full text-sm">
-            {t.active}
-          </span>
-        )}
       </div>
 
       <div className="space-y-3 mb-6">
+        {pkg.iccid && (
+          <div className="flex items-center gap-3">
+            <span className="inline-block w-6 text-center text-line font-bold">#</span>
+            <div>
+              <p className="text-gray-600">ICCID</p>
+              <p className="text-lg font-semibold tracking-widest">{pkg.iccid}</p>
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-3">
           <Signal className="text-line" size={24} />
           <div>
@@ -117,28 +140,16 @@ export function PackageCard({ package: pkg, onSelect, isPurchased }: PackageCard
               {formatDataAmount(isPurchased ? pkg.totalData || pkg.dataAmount : pkg.dataAmount)}
             </p>
           </div>
-          {isPurchased && pkg.usedData && (
-            <div className="ml-auto text-right">
-              <p className="text-gray-600">{t.used}</p>
-              <p className="text-lg font-semibold">{pkg.usedData}</p>
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-3">
           <Calendar className="text-line" size={24} />
           <div>
-            <p className="text-gray-600">{t.validity}</p>
+            <p className="text-gray-600">{t.validityRange || '有效期間'}</p>
             <p className="text-lg font-semibold">
-              {formatValidity(pkg.validity)}
+              {pkg.validity ? formatValidity(pkg.validity) : ''}
             </p>
           </div>
-          {isPurchased && pkg.expiryDate && (
-            <div className="ml-auto text-right">
-              <p className="text-gray-600">{t.expiry}</p>
-              <p className="text-lg font-semibold">{pkg.expiryDate}</p>
-            </div>
-          )}
         </div>
 
         {isPurchased && (
@@ -156,18 +167,31 @@ export function PackageCard({ package: pkg, onSelect, isPurchased }: PackageCard
 
       <div className="mt-6 pt-4 border-t border-gray-100">
         <div className="flex justify-between items-center">
-          <span className="text-2xl font-bold text-line">
-            {pkg.currency} {pkg.price}
+          <span className="text-base font-bold text-line">
+            {pkg.currency} {Number(pkg.price).toFixed(1)}
           </span>
-          <button 
-            className="bg-button-gradient hover:bg-button-gradient-hover text-white px-6 py-2 rounded-full transition-all duration-300 shadow-button hover:shadow-lg"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect(pkg);
-            }}
-          >
-            {isPurchased ? t.viewDetails : t.select}
-          </button>
+          <div className="flex gap-2">
+            <button 
+              className="bg-button-gradient hover:bg-button-gradient-hover text-white px-4 py-2 rounded-full transition-all duration-300 shadow-button hover:shadow-lg text-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(pkg);
+              }}
+            >
+              {isPurchased ? t.viewDetails : t.select}
+            </button>
+            {onShowInstallInstructions && (
+              <button
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full transition-all duration-300 text-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShowInstallInstructions(pkg.iccid);
+                }}
+              >
+                安裝說明
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

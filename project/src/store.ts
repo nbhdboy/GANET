@@ -1,16 +1,58 @@
 import { create } from 'zustand';
-import type { UserProfile } from './types';
+import type { UserProfile, SavedCard } from './types/index';
+import { supabase } from './lib/supabaseClient';
 
-interface Store {
+export interface Store {
   language: string;
   setLanguage: (language: string) => void;
   user: UserProfile | null;
   setUser: (user: UserProfile | null) => void;
+  savedCards: SavedCard[];
+  updateUserCards: (cards: SavedCard[]) => void;
+  fetchUserCards?: () => Promise<void>;
 }
 
-export const useStore = create<Store>((set) => ({
+export const useStore = create<Store>((set, get) => ({
   language: 'zh-TW',
   setLanguage: (language) => set({ language }),
   user: null,
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    console.log('【DEBUG】setUser 前 user.savedCards:', user?.savedCards);
+    console.log('setUser 更新:', user);
+    set({ user });
+  },
+  savedCards: [],
+  updateUserCards: (cards) => {
+    console.log('updateUserCards 更新:', cards);
+    set({ savedCards: cards });
+  },
+  fetchUserCards: async () => {
+    const user = get().user;
+    if (!user) return;
+    // 延長等待時間，確保 DB 已同步
+    await new Promise(r => setTimeout(r, 2000));
+    console.log('=== fetchUserCards 執行 ===');
+    console.log('fetchUserCards: 查詢 user_cards for', user.userId);
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select('*')
+      .eq('line_user_id', user.userId);
+    console.log('fetchUserCards 查詢結果:', data, error);
+    console.log('【DEBUG】fetchUserCards 查詢結果 data:', data);
+    // 不論 data 是什麼都 set，並強制產生新 reference
+    const cards = (data || []).map(card => ({
+      id: card.card_key,
+      last4: card.last_four,
+      brand: card.brand,
+      expiryMonth: card.expiry_month,
+      expiryYear: card.expiry_year,
+      token: card.card_token,
+      cardKey: card.card_key
+    }));
+    set((state) => ({
+      user: state.user ? { ...state.user, savedCards: [...cards] } : null,
+      savedCards: [...cards]
+    }));
+    console.log('【DEBUG】fetchUserCards set cards:', cards);
+  }
 })); 

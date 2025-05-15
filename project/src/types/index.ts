@@ -1,5 +1,6 @@
 export interface ESIMPackage {
   id: string;
+  iccid?: string;
   country: string;
   countryCode: string;
   countryNameZh: string;
@@ -11,6 +12,9 @@ export interface ESIMPackage {
   currency: string;
   description: string;
   isTopUp: boolean;
+  day?: number | string;
+  sell_price?: number | string;
+  data?: string;
 }
 
 export interface PackageData {
@@ -33,6 +37,8 @@ export interface SavedCard {
   brand: string;
   expiryMonth: string;
   expiryYear: string;
+  token: string;
+  cardKey: string;
 }
 
 export interface PurchasedESIM extends ESIMPackage {
@@ -40,6 +46,7 @@ export interface PurchasedESIM extends ESIMPackage {
   activationDate?: string;
   expiryDate?: string;
   qrCode?: string;
+  iccid?: string;
 }
 
 export interface AppState {

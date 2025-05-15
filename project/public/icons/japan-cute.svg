@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景圓 -->
+  <circle cx="32" cy="32" r="32" fill="#E0F8E7"/>
+  <!-- 招財貓身體 -->
+  <ellipse cx="32" cy="40" rx="16" ry="14" fill="white" stroke="#E5E5E5" stroke-width="2"/>
+  <!-- 招財貓頭 -->
+  <ellipse cx="32" cy="24" rx="10" ry="9" fill="white" stroke="#E5E5E5" stroke-width="2"/>
+  <!-- 左耳 -->
+  <path d="M24 18 Q22 14 26 16" fill="#F9D3B4" stroke="#E5E5E5" stroke-width="1"/>
+  <!-- 右耳 -->
+  <path d="M40 18 Q42 14 38 16" fill="#F9D3B4" stroke="#E5E5E5" stroke-width="1"/>
+  <!-- 臉部表情 -->
+  <ellipse cx="29" cy="26" rx="1.2" ry="2" fill="#333"/>
+  <ellipse cx="35" cy="26" rx="1.2" ry="2" fill="#333"/>
+  <path d="M29 30 Q32 33 35 30" stroke="#E94B4B" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+  <!-- 鼻子 -->
+  <ellipse cx="32" cy="28" rx="0.8" ry="0.5" fill="#E94B4B"/>
+  <!-- 左手舉起 -->
+  <path d="M18 36 Q12 28 22 28 Q20 34 24 36" fill="white" stroke="#E5E5E5" stroke-width="2"/>
+  <!-- 右手放下 -->
+  <ellipse cx="46" cy="44" rx="3" ry="1.2" fill="white" stroke="#E5E5E5" stroke-width="1"/>
+  <!-- 金幣 -->
+  <ellipse cx="32" cy="50" rx="5" ry="2.2" fill="#FFD700" stroke="#E5E5E5" stroke-width="1"/>
+  <text x="29" y="52" font-size="4" fill="#E94B4B" font-family="Arial">福</text>
+</svg> 

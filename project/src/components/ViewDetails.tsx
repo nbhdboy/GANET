@@ -1,9 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { ArrowLeft, Signal, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ESIMPackage } from '../types';
 import { useStore } from '../store';
 import { translations } from '../i18n';
 import { BottomNav } from './BottomNav';
+import { supabase } from '../lib/supabaseClient';
 
 interface ViewDetailsProps {
   package: ESIMPackage & {
@@ -17,17 +18,20 @@ interface ViewDetailsProps {
       validity: string;
     }>;
     purchaseCount?: number;
+    iccid?: string;
   };
   onBack: () => void;
   onPurchaseConfirm?: (pkg: ESIMPackage) => void;
   onTabChange?: (tab: 'store' | 'esims' | 'profile') => void;
+  onShowInstallInstructions?: (iccid?: string) => void;
 }
 
 export function ViewDetails({ 
   package: pkg, 
   onBack, 
   onPurchaseConfirm,
-  onTabChange 
+  onTabChange,
+  onShowInstallInstructions
 }: ViewDetailsProps) {
   const { language } = useStore();
   const t = translations[language];
@@ -36,14 +40,113 @@ export function ViewDetails({
   const [touchEnd, setTouchEnd] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
+  const [usage, setUsage] = useState<any>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
+  const [usageError, setUsageError] = useState('');
+  const [topUpPackages, setTopUpPackages] = useState<any[]>([]);
+  const [topUpLoading, setTopUpLoading] = useState(false);
+  const [topUpError, setTopUpError] = useState('');
 
-  const topUpPackages = [
-    { data: '1GB', validity: '7', price: '5.00' },
-    { data: '3GB', validity: '30', price: '10.00' },
-    { data: '10GB', validity: '30', price: '21.00' },
-    { data: '20GB', validity: '30', price: '32.00' },
-    { data: '30GB', validity: '30', price: '45.00' }
-  ];
+  const TOPUP_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7天
+  function getTopupCacheKey(iccid: string) {
+    return `esim_topups_${iccid}`;
+  }
+  function setTopupCache(iccid: string, data: any) {
+    localStorage.setItem(getTopupCacheKey(iccid), JSON.stringify({ data, ts: Date.now() }));
+  }
+  function getTopupCache(iccid: string) {
+    const raw = localStorage.getItem(getTopupCacheKey(iccid));
+    if (!raw) return null;
+    try {
+      const { data, ts } = JSON.parse(raw);
+      if (Date.now() - ts < TOPUP_CACHE_TTL) {
+        return data;
+      }
+      localStorage.removeItem(getTopupCacheKey(iccid));
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    if (!pkg.iccid) return;
+    console.log('fetch usage', pkg.iccid);
+    setUsageLoading(true);
+    setUsageError('');
+
+    const USAGE_CACHE_KEY = '__esim_usage_cache__';
+    const cache = (window as any)[USAGE_CACHE_KEY] || {};
+    const now = Date.now();
+    const cacheItem = cache[pkg.iccid];
+    if (cacheItem && now - cacheItem.ts < 15 * 60 * 1000) {
+      setUsage(cacheItem.data);
+      setUsageLoading(false);
+      return;
+    }
+    fetch(`https://lcfsxxncgqrhjtbfmtig.supabase.co/functions/v1/airalo-get-usage?iccid=${pkg.iccid}`)
+      .then(res => res.json())
+      .then(json => {
+        if (json.data) {
+          setUsage(json.data);
+          (window as any)[USAGE_CACHE_KEY] = {
+            ...cache,
+            [pkg.iccid]: { data: json.data, ts: now }
+          };
+        } else setUsageError('查無用量資料');
+      })
+      .catch(() => setUsageError('查詢失敗'))
+      .finally(() => setUsageLoading(false));
+  }, [pkg.iccid]);
+
+  useEffect(() => {
+    if (!pkg.iccid) return;
+    setTopUpLoading(true);
+    setTopUpError('');
+    // 先查 localStorage
+    const cached = getTopupCache(pkg.iccid);
+    if (cached) {
+      setTopUpPackages(cached);
+      setTopUpLoading(false);
+      return;
+    }
+    // 沒有快取才發 API + 查 DB
+    fetch(`https://lcfsxxncgqrhjtbfmtig.supabase.co/functions/v1/airalo-get-topups?iccid=${pkg.iccid}`)
+      .then(res => res.json())
+      .then(json => {
+        // function 執行完畢後再查詢 DB
+        return supabase
+          .from('esim_topups')
+          .select('id, package_id, data, day, sell_price')
+          .eq('iccid', pkg.iccid);
+      })
+      .then(({ data, error }) => {
+        if (error) {
+          setTopUpError('查詢加購方案失敗');
+          setTopUpPackages([]);
+        } else {
+          setTopUpPackages(data || []);
+          setTopupCache(pkg.iccid, data || []);
+        }
+      })
+      .catch(() => {
+        setTopUpError('查詢加購方案失敗');
+        setTopUpPackages([]);
+      })
+      .finally(() => setTopUpLoading(false));
+  }, [pkg.iccid]);
+
+  useEffect(() => {
+    if (!pkg.iccid) return;
+    // 觸發後端 function，讓 top up 方案寫入 DB
+    fetch(`https://lcfsxxncgqrhjtbfmtig.supabase.co/functions/v1/airalo-get-topups?iccid=${pkg.iccid}`)
+      .then(res => res.json())
+      .then(json => {
+        // 可選：log 回傳內容
+        console.log('top up function result', json);
+      })
+      .catch(() => {});
+  }, [pkg.iccid]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStart(e.targetTouches[0].clientX);
@@ -93,19 +196,21 @@ export function ViewDetails({
     if (onPurchaseConfirm) {
       const topUpPackage = {
         ...pkg,
+        package_id: selectedPackage.package_id,
         dataAmount: selectedPackage.data,
-        validity: `${selectedPackage.validity} days`,
-        price: parseFloat(selectedPackage.price),
+        validity: selectedPackage.day,
+        price: parseFloat(selectedPackage.sell_price),
         // 更新加購專案列表
         addOnPackages: [
           ...(pkg.addOnPackages || []),
           {
             dataAmount: selectedPackage.data,
-            validity: `${selectedPackage.validity}天`
+            validity: selectedPackage.day
           }
         ],
         // 更新加購次數
-        purchaseCount: (pkg.purchaseCount || 0) + 1
+        purchaseCount: (pkg.purchaseCount || 0) + 1,
+        isTopUp: true
       };
       onPurchaseConfirm(topUpPackage);
     }
@@ -118,11 +223,35 @@ export function ViewDetails({
     onBack(); // 切換頁面時同時關閉詳情頁
   };
 
-  const renderUsageGraph = () => {
-    const used = parseFloat(pkg.usedData || '0');
-    const total = parseFloat(pkg.totalData || '0');
-    const percentage = (used / total) * 100;
+  const handleShowInstallInstructions = () => {
+    if (onShowInstallInstructions) {
+      onShowInstallInstructions(pkg.iccid);
+    }
+  };
 
+  const renderUsageGraph = () => {
+    // 狀態優先顯示
+    let statusText = '';
+    let percent = 100;
+    let used = 0;
+    let total = 0;
+    if (usage) {
+      used = usage.total - usage.remaining;
+      total = usage.total;
+      if (usage.status === 'NOT_ACTIVE') {
+        statusText = '尚未啟用';
+        percent = 100;
+      } else if (usage.status === 'ACTIVE') {
+        statusText = '啟用中';
+        percent = total > 0 ? Math.round((used / total) * 100) : 0;
+      } else if (usage.status === 'EXPIRED') {
+        statusText = '已過期';
+        percent = 0;
+      } else {
+        statusText = usage.status;
+        percent = total > 0 ? Math.round((used / total) * 100) : 0;
+      }
+    }
     const radius = 150;
     const centerX = 120;
     const centerY = 150;
@@ -156,6 +285,7 @@ export function ViewDetails({
               <Signal className="w-4 h-4" />
               <span className="font-medium text-sm">數據用量</span>
             </div>
+            <span className="text-xs text-gray-500">{statusText}</span>
           </div>
           <div className="relative mt-4">
             <div className="w-full h-36 mx-auto relative">
@@ -176,9 +306,9 @@ export function ViewDetails({
                     strokeLinecap="round"
                   />
                   {/* 已使用進度 - 灰色 */}
-                  {percentage > 0 && (
+                  {percent > 0 && (
                     <path
-                      d={createArc(percentage)}
+                      d={createArc(percent)}
                       fill="none"
                       stroke="#E5E7EB"
                       strokeWidth={strokeWidth}
@@ -187,49 +317,39 @@ export function ViewDetails({
                   )}
                   {/* 進度點 */}
                   <circle
-                    cx={centerX + (radius - strokeWidth / 2) * Math.cos((-180 + (180 * percentage) / 100) * Math.PI / 180)}
-                    cy={centerY + (radius - strokeWidth / 2) * Math.sin((-180 + (180 * percentage) / 100) * Math.PI / 180)}
+                    cx={centerX + (radius - strokeWidth / 2) * Math.cos((-180 + (180 * percent) / 100) * Math.PI / 180)}
+                    cy={centerY + (radius - strokeWidth / 2) * Math.sin((-180 + (180 * percent) / 100) * Math.PI / 180)}
                     r={strokeWidth / 2}
-                    fill={percentage > 0 ? '#E5E7EB' : '#86EFAC'}
+                    fill={percent > 0 ? '#E5E7EB' : '#86EFAC'}
                   />
                 </svg>
               </div>
               <div className="absolute inset-0 flex items-center justify-center flex-col translate-y-2">
-                <span className="text-3xl font-bold text-gray-700">{percentage.toFixed(2)}%</span>
-                <div className="text-sm text-gray-500">
-                  {t.remainingData}
-                </div>
+                {usageLoading ? (
+                  <span className="text-gray-400">載入中...</span>
+                ) : usageError ? (
+                  <span className="text-red-500">{usageError}</span>
+                ) : (
+                  <>
+                    <span className="text-3xl font-bold text-gray-700">{percent}%</span>
+                    <div className="text-sm text-gray-500">{t.remainingData}</div>
+                  </>
+                )}
               </div>
             </div>
           </div>
           <div className="mt-0 space-y-1.5 border-t pt-2 text-xs">
             <div className="flex justify-between">
               <span className="text-gray-500">已使用數據</span>
-              <span className="font-medium">{pkg.usedData || '0 MB'}</span>
+              <span className="font-medium">{used} MB</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">尚未使用數據</span>
-              <span className="font-medium">
-                {(() => {
-                  const total = parseFloat(pkg.totalData?.replace('GB', '') || '0');
-                  const used = parseFloat(pkg.usedData?.replace('MB', '') || '0') / 1024;
-                  return `${(total - used).toFixed(2)} GB`;
-                })()}
-              </span>
+              <span className="font-medium">{usage ? usage.remaining : 0} MB</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">有效期間</span>
-              <span className="font-medium">
-                {(() => {
-                  if (pkg.activationDate && pkg.expiryDate) {
-                    const start = new Date(pkg.activationDate);
-                    const end = new Date(pkg.expiryDate);
-                    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                    return `${days} 天`;
-                  }
-                  return '尚未啟用';
-                })()}
-              </span>
+              <span className="font-medium">{usage && usage.expired_at ? usage.expired_at : '尚未啟用'}</span>
             </div>
           </div>
         </div>
@@ -264,7 +384,7 @@ export function ViewDetails({
                 pkg.addOnPackages.map((addOn, index) => (
                   <div key={index} className="bg-green-50 rounded-lg px-4 py-2 mb-2 last:mb-0">
                     <div className="font-medium text-green-600 text-lg">{addOn.dataAmount}</div>
-                    <div className="text-sm text-gray-600">有效期 {addOn.validity.replace('天', '')} 天</div>
+                    <div className="text-sm text-gray-600">{addOn.validity ? `有效期間 ${addOn.validity}天` : ''}</div>
                   </div>
                 ))
               ) : (
@@ -277,69 +397,88 @@ export function ViewDetails({
     </div>
   );
 
+  // 排序加購方案（依據 data 由小到大）
+  const sortedTopUpPackages = [...topUpPackages].sort((a, b) => {
+    // 只取數字部分，忽略單位
+    const getGB = (data: string) => {
+      if (!data) return 0;
+      const match = data.match(/([\d.]+)\s*GB/i);
+      return match ? parseFloat(match[1]) : 0;
+    };
+    return getGB(a.data) - getGB(b.data);
+  });
+
   const renderTopUpPackages = () => (
     <div className="bg-white rounded-lg p-4 h-full">
-      <h3 className="text-lg font-semibold mb-2">加購專案</h3>
-      <div className="relative overflow-hidden h-[calc(100%-3rem)]">
-        <div 
-          className="flex transition-transform duration-300 ease-out h-full"
-          style={{
-            transform: `translateX(${dragOffset}px)`,
-          }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
-          {topUpPackages.map((topUpPkg, index) => (
-            <div 
-              key={index}
-              className={`w-full flex-shrink-0 transition-transform duration-300 ${
-                index === currentTopUpIndex ? 'scale-100' : 'scale-95 opacity-80'
-              }`}
-              style={{
-                transform: `translateX(-${currentTopUpIndex * 100}%)`,
-              }}
-            >
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4 mx-2 h-full">
-                <div className="space-y-3">
-                  <div>
-                    <span className="text-sm text-gray-500">數據</span>
-                    <h4 className="text-2xl font-bold">{topUpPkg.data}</h4>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-500">有效期限</span>
-                    <p className="font-medium">{topUpPkg.validity} 天</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-500">價格</span>
-                    <p className="text-xl font-bold text-green-600">
-                      ${topUpPkg.price}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <button 
-                      onClick={(e) => handleTopUp(e, topUpPkg)}
-                      className="w-full py-3 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full text-sm hover:from-green-500 hover:to-green-600 transition-all duration-300"
-                    >
-                      加購
-                    </button>
-                    <div className="flex justify-center gap-2 pt-2">
-                      {topUpPackages.map((_, idx) => (
-                        <div
-                          key={idx}
-                          className={`h-2 rounded-full transition-all duration-300 ${
-                            idx === currentTopUpIndex ? 'w-2 bg-green-500' : 'w-2 bg-gray-300'
-                          }`}
-                        />
-                      ))}
+      <h3 className="text-lg font-semibold mb-2">可用的加值套餐</h3>
+      {topUpLoading ? (
+        <div className="text-gray-400">載入中...</div>
+      ) : topUpError ? (
+        <div className="text-red-500">{topUpError}</div>
+      ) : sortedTopUpPackages.length === 0 ? (
+        <div className="text-gray-500">尚無可加購方案</div>
+      ) : (
+        <div className="relative overflow-hidden h-[calc(100%-3rem)]">
+          <div 
+            className="flex transition-transform duration-300 ease-out h-full"
+            style={{
+              transform: `translateX(${dragOffset}px)`,
+            }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {sortedTopUpPackages.map((topUpPkg, index) => (
+              <div 
+                key={index}
+                className={`w-full flex-shrink-0 transition-transform duration-300 ${
+                  index === currentTopUpIndex ? 'scale-100' : 'scale-95 opacity-80'
+                }`}
+                style={{
+                  transform: `translateX(-${currentTopUpIndex * 100}%)`,
+                }}
+              >
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4 mx-2 h-full">
+                  <div className="space-y-3">
+                    <div>
+                      <span className="text-sm text-gray-500">{t.data}</span>
+                      <h4 className="text-2xl font-bold">{topUpPkg.data}</h4>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-500">有效期間</span>
+                      <p className="text-2xl font-bold">{topUpPkg.day} 天</p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-500">{t.price}</span>
+                      <p className="text-xl font-bold text-green-600">
+                        ${topUpPkg.sell_price ? Number(topUpPkg.sell_price).toFixed(1) : '-'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <button 
+                        onClick={(e) => handleTopUp(e, topUpPkg)}
+                        className="w-full py-3 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full text-sm hover:from-green-500 hover:to-green-600 transition-all duration-300"
+                      >
+                        {t.topUp}
+                      </button>
+                      <div className="flex justify-center gap-2 pt-2">
+                        {sortedTopUpPackages.map((_, idx) => (
+                          <div
+                            key={idx}
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              idx === currentTopUpIndex ? 'w-2 bg-green-500' : 'w-2 bg-gray-300'
+                            }`}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 
@@ -372,6 +511,15 @@ export function ViewDetails({
 
       <div className="fixed bottom-0 left-0 right-0 bg-white z-50">
         <BottomNav activeTab="esims" onTabChange={handleTabChange} />
+      </div>
+
+      <div className="relative">
+        <button
+          className="absolute top-4 right-4 bg-button-gradient hover:bg-button-gradient-hover text-white px-4 py-2 rounded-full shadow-button z-10"
+          onClick={handleShowInstallInstructions}
+        >
+          {t.installInstructions}
+        </button>
       </div>
     </div>
   );

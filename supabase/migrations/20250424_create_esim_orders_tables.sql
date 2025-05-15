@@ -11,6 +11,8 @@ create table if not exists public.esim_orders (
     price numeric,
     currency text,
     description text,
+    type text, -- 新增，記錄訂單型態 sim/topup
+    iccid text, -- 新增，記錄加值對象 ICCID
     esim_type text,
     created_at timestamptz, -- Airalo 訂單建立時間
     manual_installation text,

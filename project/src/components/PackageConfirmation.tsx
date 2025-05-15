@@ -1,4 +1,4 @@
-import { type FC, useState } from 'react';
+import { type FC, useState, useRef } from 'react';
 import { X, CreditCard, Signal, Calendar } from 'lucide-react';
 import type { ESIMPackage } from '../types';
 import { useStore } from '../store';
@@ -7,7 +7,7 @@ import type { TranslationKey } from '../types/i18n';
 
 interface PackageConfirmationProps {
   package: ESIMPackage;
-  onConfirm: (finalPrice: number) => void;
+  onConfirm: (pkg: ESIMPackage) => void;
   onCancel: () => void;
 }
 
@@ -16,26 +16,41 @@ export const PackageConfirmation: FC<PackageConfirmationProps> = ({ package: pkg
   const t = translations[language] as Record<TranslationKey, string>;
   const [discountCode, setDiscountCode] = useState('');
   const [isDiscountApplied, setIsDiscountApplied] = useState(false);
+  const [discountError, setDiscountError] = useState('');
+  const discountRef = useRef<HTMLDivElement>(null);
+  const discountErrorRef = useRef<HTMLDivElement>(null);
   
   const handleDiscountCode = () => {
     if (discountCode === '4242') {
       setIsDiscountApplied(true);
+      setDiscountError('');
+      setTimeout(() => {
+        discountRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
     } else {
       setIsDiscountApplied(false);
+      setDiscountError('查無此折扣碼');
+      setTimeout(() => {
+        discountErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
     }
   };
 
+  // 取得天數與價格，優先 day/sell_price
+  const validityDays = pkg.day ?? pkg.validity;
+  const finalPrice = pkg.sell_price ?? pkg.price;
+
   const calculatePrice = () => {
     if (isDiscountApplied) {
-      return parseFloat((pkg.price * 0.9).toFixed(2)); // 9折
+      return parseFloat((Number(finalPrice) * 0.9).toFixed(2)); // 9折
     }
-    return pkg.price;
+    return Number(finalPrice);
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col">
-        <div className="p-6">
+      <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-[#4CD964]">
               {t.confirmPurchase}
@@ -79,8 +94,8 @@ export const PackageConfirmation: FC<PackageConfirmationProps> = ({ package: pkg
             <div className="flex items-center gap-3">
               <Calendar className="text-[#4CD964]" size={24} />
               <div>
-                <p className="text-gray-600">{t.validity}</p>
-                <p className="text-lg font-semibold">{pkg.validity}</p>
+                <p className="text-gray-600">有效期間</p>
+                <p className="text-lg font-semibold">{validityDays} {t.days}</p>
               </div>
             </div>
           </div>
@@ -88,7 +103,7 @@ export const PackageConfirmation: FC<PackageConfirmationProps> = ({ package: pkg
           <div className="mt-4 space-y-3">
             <div className="flex justify-between items-center text-gray-600">
               <span>{t.price}</span>
-              <span className="text-xl font-bold">{pkg.currency} {pkg.price.toFixed(2)}</span>
+              <span className="text-xl font-bold">{pkg.currency} {Number(finalPrice).toFixed(2)}</span>
             </div>
             
             <div className="flex items-center gap-2">
@@ -108,10 +123,14 @@ export const PackageConfirmation: FC<PackageConfirmationProps> = ({ package: pkg
             </div>
 
             {isDiscountApplied && (
-              <div className="flex justify-between items-center text-[#4CD964]">
+              <div ref={discountRef} className="flex justify-between items-center text-[#4CD964]">
                 <span>{language === 'en' ? "Discount (10% off)" : "折扣 (9折)"}</span>
-                <span>-{pkg.currency} {(pkg.price * 0.1).toFixed(2)}</span>
+                <span>-{pkg.currency} {(Number(finalPrice) * 0.1).toFixed(2)}</span>
               </div>
+            )}
+
+            {discountError && !isDiscountApplied && (
+              <div ref={discountErrorRef} className="text-red-500 text-sm mt-1">{discountError}</div>
             )}
 
             <div className="flex justify-between items-center">
@@ -125,7 +144,7 @@ export const PackageConfirmation: FC<PackageConfirmationProps> = ({ package: pkg
 
         <div className="p-6 space-y-3">
           <button
-            onClick={() => onConfirm(calculatePrice())}
+            onClick={() => onConfirm({ ...pkg, price: calculatePrice() })}
             className="w-full bg-[#4CD964] hover:bg-[#40c357] text-white py-3 rounded-full transition-colors font-medium flex items-center justify-center gap-2"
           >
             <CreditCard size={20} />

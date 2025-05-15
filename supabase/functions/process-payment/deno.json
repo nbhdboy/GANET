@@ -9,7 +9,7 @@
     "dev": "deno run --watch --allow-net --allow-env --allow-read index.ts"
   },
   "compilerOptions": {
-    "lib": ["deno.window", "dom", "esnext"],
+    "lib": ["deno.ns", "dom"],
     "strict": true,
     "noImplicitAny": false
   },

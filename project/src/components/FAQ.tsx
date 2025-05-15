@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowLeft, ChevronDown } from 'lucide-react';
 import { useStore } from '../store';
 import { translations } from '../i18n';
+import type { Store } from '../store';
 
 interface FAQProps {
   onBack: () => void;
@@ -16,8 +17,8 @@ interface FAQSection {
 }
 
 export function FAQ({ onBack }: FAQProps) {
-  const { language } = useStore();
-  const t = translations[language];
+  const { language } = useStore() as Store;
+  const t = translations[language as keyof typeof translations];
 
   const faqSections: FAQSection[] = [
     {

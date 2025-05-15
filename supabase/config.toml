@@ -140,11 +140,54 @@ s3_region = "env(S3_REGION)"
 s3_access_key = "env(S3_ACCESS_KEY)"
 s3_secret_key = "env(S3_SECRET_KEY)"
 
+[functions]
+
 [functions.process-payment]
 enabled = true
-verify_jwt = false
 import_map = "./functions/process-payment/deno.json"
 entrypoint = "./functions/process-payment/index.ts"
+verify_jwt  = false 
 
 [functions.bind-card]
+enabled     = true
+import_map  = "./functions/bind-card/deno.json"
+entrypoint  = "./functions/bind-card/index.ts"
+verify_jwt  = false
+
+[functions.airalo-get-packages]
+enabled = true
+import_map = "./functions/airalo-get-packages/deno.json"
+entrypoint = "./functions/airalo-get-packages/index.ts"
+verify_jwt = false
+
+[functions.airalo-install-instructions]
+enabled = true
+import_map = "./functions/airalo-install-instructions/deno.json"
+entrypoint = "./functions/airalo-install-instructions/index.ts"
+verify_jwt = false
+
+[functions.airalo-get-usage]
+enabled = true
+import_map = "./functions/airalo-get-usage/deno.json"
+entrypoint = "./functions/airalo-get-usage/index.ts"
+verify_jwt = false
+
+[functions.airalo-get-topups]
+enabled = true
+entrypoint = "./functions/airalo-get-topups/index.ts"
+verify_jwt = false
+
+[functions.airalo-topup-order]
+enabled = true
+entrypoint = "./functions/airalo-topup-order/index.ts"
+verify_jwt = false
+
+[functions.airalo-webhook]
+enabled = true
+entrypoint = "./functions/airalo-webhook/index.ts"
+verify_jwt = false
+
+[functions.line-userid-webhook]
+enabled = true
+entrypoint = "./functions/line-userid-webhook/index.ts"
 verify_jwt = false

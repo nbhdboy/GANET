@@ -48,9 +48,12 @@ export function SuccessOverlay() {
         </div>
         
         <div className="text-center">
-          <h3 className="text-2xl font-bold bg-line-gradient bg-clip-text text-transparent mb-2">
-            {t.purchaseSuccess}
+          <h3 className="text-2xl font-bold bg-line-gradient bg-clip-text text-transparent mb-2 flex items-center justify-center">
+            {t.purchaseSuccess.replace('🎉','')}
           </h3>
+          <div className="text-xl font-bold bg-line-gradient bg-clip-text text-transparent mb-2">
+            {t.haveANiceTrip}
+          </div>
           <p className="text-gray-600">{t.redirectingToEsims}</p>
         </div>
 

@@ -27,25 +27,5 @@ create trigger update_user_cards_updated_at
     for each row
     execute function update_updated_at_column();
 
--- 設置 RLS
-alter table public.user_cards enable row level security;
-
--- 創建存取策略
-create policy "用戶只能查看自己的卡片"
-    on public.user_cards for select
-    using (auth.uid()::text = line_user_id);
-
-create policy "用戶只能新增自己的卡片"
-    on public.user_cards for insert
-    with check (auth.uid()::text = line_user_id);
-
-create policy "用戶只能更新自己的卡片"
-    on public.user_cards for update
-    using (auth.uid()::text = line_user_id);
-
-create policy "用戶只能刪除自己的卡片"
-    on public.user_cards for delete
-    using (auth.uid()::text = line_user_id);
-
 -- 創建索引
 create index idx_user_cards_line_user_id on public.user_cards(line_user_id);

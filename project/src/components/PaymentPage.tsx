@@ -9,7 +9,7 @@ import { SuccessOverlay } from './SuccessOverlay';
 interface PaymentPageProps {
   package: ESIMPackage;
   onClose: () => void;
-  onPurchaseComplete: () => void;
+  onPurchaseComplete: (iccid?: string) => void;
 }
 
 type PaymentMethod = 'card' | 'linepay' | 'saved_card';
@@ -22,6 +22,7 @@ declare global {
 }
 
 export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPurchaseComplete }) => {
+  console.log('【DEBUG】PaymentPage render，pkg:', pkg);
   const { language, user } = useStore();
   const t = translations[language];
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('saved_card');
@@ -33,6 +34,8 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
   const setupCompleted = useRef(false);
 
   useEffect(() => {
+    console.log('【DEBUG】PaymentPage user:', user);
+    console.log('【DEBUG】PaymentPage user?.savedCards:', user?.savedCards);
     if (user?.savedCards?.length > 0) {
       setSelectedCard(user.savedCards[0]);
       setSelectedMethod('saved_card');
@@ -42,45 +45,19 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
   }, [user?.savedCards]);
 
   useEffect(() => {
+    // 先移除所有舊的 TapPay script
+    document.querySelectorAll('script[src*="tappaysdk.com"]').forEach(s => s.remove());
+
+    // 再插入新 script
+    const script = document.createElement('script');
+    script.src = 'https://js.tappaysdk.com/sdk/tpdirect/v5.20.0';
+    script.async = true;
+    script.id = 'tappay-sdk';
+    document.body.appendChild(script);
+
     let isMounted = true;
     
-    const loadTapPay = async () => {
-      try {
-        // 檢查全局變數
-        if (window.TPDirect?.card) {
-          console.log('TapPay SDK already initialized');
-          setIsTapPayReady(true);
-          return;
-        }
-
-        // 檢查是否已經有 script 標籤
-        const existingScript = document.getElementById('tappay-sdk');
-        if (existingScript) {
-          console.log('Waiting for existing TapPay script to load');
-          await new Promise(resolve => {
-            existingScript.addEventListener('load', resolve);
-          });
-          if (window.TPDirect?.card) {
-            setIsTapPayReady(true);
-            return;
-          }
-        }
-
-        console.log('Loading TapPay SDK');
-        const script = document.createElement('script');
-        script.src = 'https://js.tappaysdk.com/sdk/tpdirect/v5.19.2';
-        script.async = true;
-        script.crossOrigin = "anonymous";
-        script.id = 'tappay-sdk';
-
-        const scriptLoadPromise = new Promise((resolve, reject) => {
-          script.onload = resolve;
-          script.onerror = reject;
-        });
-
-        document.body.appendChild(script);
-        await scriptLoadPromise;
-
+    script.onload = async () => {
         // 等待 TPDirect 可用
         let retries = 0;
         const maxRetries = 10;
@@ -88,66 +65,23 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
           await new Promise(resolve => setTimeout(resolve, 500));
           retries++;
         }
-
         if (!window.TPDirect) {
-          throw new Error('TapPay SDK not loaded after multiple retries');
+        console.error('TapPay SDK not loaded after multiple retries');
+        return;
         }
-
+      // 初始化 SDK
         const appId = import.meta.env.VITE_TAPPAY_APP_ID;
         const appKey = import.meta.env.VITE_TAPPAY_APP_KEY;
-
-        // 詳細記錄初始化參數
-        console.log('=== TapPay SDK 初始化參數 ===');
-        console.log('App ID:', appId, typeof appId);
-        console.log('App Key:', appKey?.substring(0, 10) + '...');
-        console.log('Environment:', 'sandbox');
-
-        try {
-          // 確保 appId 是數字
-          const numericAppId = parseInt(appId, 10);
-          if (isNaN(numericAppId)) {
-            throw new Error('Invalid App ID format');
-          }
-
-          // 檢查 App Key 格式
-          if (!appKey?.startsWith('app_')) {
-            throw new Error('Invalid App Key format');
-          }
-
-          console.log('初始化 TapPay SDK 開始...');
-          window.TPDirect.setupSDK(
-            numericAppId,
-            appKey,
-            'sandbox'
-          );
-          
-          // 驗證初始化結果
-          if (!window.TPDirect.card) {
-            throw new Error('TapPay SDK initialization failed - card module not available');
-          }
-          
-          console.log('TapPay SDK 初始化成功');
+      window.TPDirect.setupSDK(Number(appId), appKey, 'sandbox');
           if (isMounted) {
             setIsTapPayReady(true);
           }
-        } catch (error) {
-          console.error('TapPay SDK 初始化錯誤:', error);
-          setErrorMessage(`Payment system initialization failed: ${error.message}`);
-          return;
-        }
-      } catch (error) {
-        console.error('TapPay SDK initialization failed:', error);
-        if (isMounted) {
-          setErrorMessage('Payment system initialization failed. Please try again later.');
-        }
-      }
     };
-
-    loadTapPay();
 
     return () => {
       isMounted = false;
       setIsTapPayReady(false);
+      document.querySelectorAll('script#tappay-sdk').forEach(s => s.remove());
       setupCompleted.current = false;
     };
   }, []);
@@ -244,64 +178,103 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
   }, [selectedMethod, isTapPayReady]);
 
   const handlePurchase = async () => {
+    console.log('【DEBUG】handlePurchase 被呼叫');
     try {
       setStatus('processing');
       setErrorMessage('');
 
+      if (!user) {
+        throw new Error('請先登入');
+      }
+
+      // 判斷是否為加值（topup）
+      if (pkg.isTopUp) {
+        // 付款成功後呼叫 top up order API
+        try {
+          const result = await submitTopupOrder({
+            package_id: pkg.package_id || pkg.id,
+            iccid: pkg.iccid!,
+            user_id: user.userId,
+            description: pkg.description || 'Top up order',
+          });
+          setStatus('success');
+          setTimeout(() => {
+            onPurchaseComplete(pkg.iccid);
+          }, 2000);
+        } catch (e: any) {
+          setErrorMessage(e.message || '加值下單失敗');
+          setStatus('error');
+        }
+        return;
+      }
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
+      };
+
       if (selectedMethod === 'saved_card' && selectedCard) {
-        // 使用已儲存的卡片進行付款
+        // Debug log
+        console.log('【DEBUG】selectedCard:', selectedCard);
+        const cardKey = selectedCard.cardKey;
+        const cardToken = selectedCard.token;
+        const payload = {
+          card_key: cardKey,
+          card_token: cardToken,
+          amount: Math.round(pkg.price * 100), // 假設是台幣
+          currency: 'TWD',
+          details: 'eSIM Payment',
+          remember: true,
+          cardholder: {
+            phone_number: '+886900000000',
+            name: 'Test User',
+            email: 'test@example.com'
+          },
+          order_number: `ESIM_${Date.now()}`,
+          package_id: pkg.id || pkg.package_id,
+          user_id: user.userId
+        };
+        console.log('【DEBUG】送出付款 payload:', payload);
+        // 發送支付請求到後端
         const response = await fetch(`${import.meta.env.VITE_API_URL}/process-payment`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'x-client-info': 'payment-client'
-          },
-          body: JSON.stringify({
-            cardId: selectedCard.id,
-            amount: pkg.currency === 'USD' ? Math.round(pkg.price * 31 * 100) : Math.round(pkg.price * 100),
-            currency: 'TWD'
-          })
+          headers,
+          body: JSON.stringify(payload)
         });
-
         if (!response.ok) {
-          throw new Error('付款處理失敗');
+          const errorData = await response.json();
+          throw new Error(errorData.error || '付款處理失敗');
         }
-
+        const responseData = await response.json();
+        console.log('支付處理成功:', responseData);
         setStatus('success');
         setTimeout(() => {
-          onPurchaseComplete();
+          onPurchaseComplete(responseData?.esim?.sims?.[0]?.iccid);
         }, 2000);
       } else if (selectedMethod === 'card') {
-        // 獲取 TapPay Prime
+        // 獲取 TapPay Prime（一般信用卡）
         const tappayStatus = window.TPDirect.card.getTappayFieldsStatus();
-        
         console.log('支付狀態檢查:', {
           canGetPrime: tappayStatus.canGetPrime,
           hasError: tappayStatus.hasError,
           status: tappayStatus.status
         });
-
         if (!tappayStatus.canGetPrime) {
           throw new Error('請確認信用卡資訊是否正確填寫');
         }
-
         try {
-          // 使用正確的 TapPay getPrime 回調方式
+          // 只傳 callback
           const prime = await new Promise((resolve, reject) => {
             window.TPDirect.card.getPrime((result) => {
               console.log('TapPay getPrime 完整結果:', result);
-              
               if (result.status !== 0) {
                 reject(new Error(result.msg || '取得 prime 失敗'));
                 return;
               }
-              
               if (!result.card || !result.card.prime) {
                 reject(new Error('無法取得有效的 prime'));
                 return;
               }
-              
               resolve(result.card.prime);
             });
           });
@@ -309,35 +282,48 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
           console.log('成功獲取 prime:', prime);
 
           // 發送支付請求到後端
+          const payload = {
+            prime,
+            amount: pkg.currency === 'USD' ? Math.round(pkg.price * 31 * 100) : Math.round(pkg.price * 100),
+            currency: 'TWD',
+            details: 'eSIM Payment',
+            cardholder: {
+              phone_number: user.phone || '',
+              name: user.name || '',
+              email: user.email || ''
+            },
+            remember: false,
+            order_number: `ESIM_${Date.now()}`,
+            bank_transaction_id: `BT_${Date.now()}`,
+            result_url: {
+              frontend_redirect_url: '',
+              backend_notify_url: ''
+            },
+            three_domain_secure: false,
+            package_id: pkg.id || pkg.package_id,
+            user_id: user.userId
+          };
+          console.log('【DEBUG】送出付款 payload:', payload);
           const response = await fetch(`${import.meta.env.VITE_API_URL}/process-payment`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-              'x-client-info': 'payment-client'
-            },
-            body: JSON.stringify({
-              prime,
-              amount: pkg.currency === 'USD' ? Math.round(pkg.price * 31 * 100) : Math.round(pkg.price * 100),
-              currency: 'TWD'
-            })
+            headers,
+            body: JSON.stringify(payload)
           });
 
           if (!response.ok) {
             const errorData = await response.json();
             console.error('支付請求失敗:', errorData);
-            throw new Error(errorData.message || '支付處理失敗');
+            throw new Error(errorData.error || '支付處理失敗');
           }
 
           const responseData = await response.json();
           console.log('支付處理成功:', responseData);
 
           setStatus('success');
-          // 延長成功狀態的顯示時間
           setTimeout(() => {
             setStatus('idle');
-            onPurchaseComplete();
-          }, 5000); // 從 3000ms 改為 5000ms
+            onPurchaseComplete(responseData?.esim?.sims?.[0]?.iccid);
+          }, 5000);
         } catch (error) {
           console.error('支付處理錯誤:', error);
           setErrorMessage(error.message || '支付處理時發生錯誤，請稍後再試');
@@ -345,24 +331,25 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
         }
       } else if (selectedMethod === 'linepay') {
         setStatus('success');
-        // 延長成功狀態的顯示時間
         setTimeout(() => {
           setStatus('idle');
           onPurchaseComplete();
-        }, 5000); // 從 3000ms 改為 5000ms
+        }, 5000);
       }
     } catch (error) {
       console.error('付款處理錯誤:', error);
       setStatus('error');
+      setTimeout(() => {
       setErrorMessage(error instanceof Error ? error.message : '付款處理失敗');
+      }, 500); // 讓動畫顯示至少 0.5 秒
     }
   };
 
   return (
     <>
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl w-full max-w-lg">
-          <div className="p-6 border-b border-gray-100">
+        <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col h-full">
+          <div className="flex-1 overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold bg-line-gradient bg-clip-text text-transparent">
                 {t.selectPaymentMethod}
@@ -444,20 +431,20 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         {t.cardNumber}
                       </label>
-                      <div id="card-number" className="h-10 bg-white border border-gray-300 rounded-lg overflow-hidden"></div>
+                      <div id="card-number" className="h-10 bg-white border border-gray-300 rounded-lg overflow-hidden z-0"></div>
                     </div>
                     <div className="flex gap-4">
                       <div className="flex-1">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           {t.expiryDate}
                         </label>
-                        <div id="card-expiration-date" className="h-10 bg-white border border-gray-300 rounded-lg overflow-hidden"></div>
+                        <div id="card-expiration-date" className="h-10 bg-white border border-gray-300 rounded-lg overflow-hidden z-0"></div>
                       </div>
                       <div className="w-32">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           {t.cvv}
                         </label>
-                        <div id="card-ccv" className="h-10 bg-white border border-gray-300 rounded-lg overflow-hidden"></div>
+                        <div id="card-ccv" className="h-10 bg-white border border-gray-300 rounded-lg overflow-hidden z-0"></div>
                       </div>
                     </div>
                     {errorMessage && (
@@ -487,28 +474,34 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-gray-600">{pkg.name}</span>
-                  <span className="font-semibold">{pkg.currency} {pkg.price}</span>
+                  <span className="font-semibold">{pkg.currency} {Number(pkg.price).toFixed(1)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">{t.total}</span>
                   <span className="text-xl font-bold bg-line-gradient bg-clip-text text-transparent">
-                    {pkg.currency} {pkg.price}
+                    {pkg.currency} {Number(pkg.price).toFixed(1)}
                   </span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-6 space-y-3 relative">
             <button
               onClick={handlePurchase}
               disabled={status !== 'idle' || 
                 (selectedMethod === 'card' && !isCardValid) ||
                 (selectedMethod === 'saved_card' && !selectedCard)}
-              className="w-full bg-line-gradient hover:bg-line-gradient-hover text-white py-3 rounded-full transition-all font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-line-gradient hover:bg-line-gradient-hover text-white py-3 rounded-full transition-all font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed z-10"
             >
               <CreditCard size={20} />
               {t.purchase}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-full bg-gray-100 text-gray-700 py-3 rounded-full hover:bg-gray-200 transition-colors font-medium"
+            >
+              {t.cancel}
             </button>
           </div>
         </div>
@@ -517,4 +510,28 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
       {status === 'success' && <SuccessOverlay />}
     </>
   );
+}
+
+// 直接在 PaymentPage.tsx 內宣告 function
+async function submitTopupOrder({
+  package_id,
+  iccid,
+  user_id,
+  description,
+}: {
+  package_id: string
+  iccid: string
+  user_id: string
+  description: string
+}) {
+  const res = await fetch(
+    'https://lcfsxxncgqrhjtbfmtig.supabase.co/functions/v1/airalo-topup-order',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ package_id, iccid, user_id, description }),
+    }
+  )
+  if (!res.ok) throw new Error('加值下單失敗')
+  return await res.json()
 }
