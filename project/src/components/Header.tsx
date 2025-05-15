@@ -17,17 +17,13 @@ export function Header({ onMenuClick, onLogout }: HeaderProps) {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 bg-line-gradient text-white shadow-lg z-50">
+    <header className="fixed top-0 left-0 right-0 bg-[#E6F9EC] text-green-900 shadow-lg z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <button 
-          onClick={onMenuClick}
-          className="p-2 hover:bg-white/10 rounded-full transition-colors"
-          aria-label={t.menu}
-        >
-          <Menu size={24} />
-        </button>
+        <div className="flex items-center gap-2 h-16">
+          <img src="/icons/logo.png" alt="CANET Logo" className="h-16 ml-1" style={{height: '60px', marginTop: '-16px'}} />
+        </div>
         
-        <h1 className="text-xl font-bold">{t.title}</h1>
+        {/* <h1 className="text-xl font-bold">{t.title}</h1> */}
         
         <div className="flex items-center gap-2">
           <button 
