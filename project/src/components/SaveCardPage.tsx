@@ -26,88 +26,19 @@ export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProp
 
   useEffect(() => {
     let isMounted = true;
-    
-    const loadTapPay = async () => {
-      try {
-        // 檢查全局變數
-        if (window.TPDirect?.card) {
-          console.log('TapPay SDK already initialized');
-          setIsTapPayReady(true);
-          return;
-        }
-
-        // 檢查是否已經有 script 標籤
-        const existingScript = document.getElementById('tappay-sdk');
-        if (existingScript) {
-          console.log('Waiting for existing TapPay script to load');
-          await new Promise(resolve => {
-            existingScript.addEventListener('load', resolve);
-          });
-          if (window.TPDirect?.card) {
-            setIsTapPayReady(true);
-            return;
-          }
-        }
-
-        console.log('Loading TapPay SDK');
-        const script = document.createElement('script');
-        script.src = 'https://js.tappaysdk.com/sdk/tpdirect/v5.19.2';
-        script.async = true;
-        script.crossOrigin = "anonymous";
-        script.id = 'tappay-sdk';
-
-        const scriptLoadPromise = new Promise((resolve, reject) => {
-          script.onload = resolve;
-          script.onerror = reject;
-        });
-
-        document.body.appendChild(script);
-        await scriptLoadPromise;
-
-        // 等待 TPDirect 可用
-        let retries = 0;
-        const maxRetries = 10;
-        while (!window.TPDirect && retries < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          retries++;
-        }
-
-        if (!window.TPDirect) {
-          throw new Error('TapPay SDK not loaded after multiple retries');
-        }
-
-        const appId = import.meta.env.VITE_TAPPAY_APP_ID;
-        const appKey = import.meta.env.VITE_TAPPAY_APP_KEY;
-
-        console.log('TapPay Config:', {
-          appId: appId ? 'exists' : 'missing',
-          appKey: appKey ? 'exists' : 'missing'
-        });
-
-        window.TPDirect.setupSDK(
-          parseInt(appId, 10),
-          appKey,
-          'sandbox'
-        );
-        
-        console.log('TapPay SDK Setup completed');
-        
-        if (isMounted) {
-          setIsTapPayReady(true);
-        }
-      } catch (error) {
-        console.error('TapPay SDK initialization failed:', error);
-        if (isMounted) {
-          setErrorMessage('支付系統初始化失敗，請稍後再試');
-        }
+    const waitForTPDirect = async () => {
+      let retries = 0;
+      const maxRetries = 20;
+      while (!(window as any).TPDirect && retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        retries++;
+      }
+      if ((window as any).TPDirect && isMounted) {
+        setIsTapPayReady(true);
       }
     };
-
-    loadTapPay();
-
-    return () => {
-      isMounted = false;
-    };
+    waitForTPDirect();
+    return () => { isMounted = false; };
   }, []);
 
   useEffect(() => {
@@ -133,6 +64,12 @@ export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProp
           if (!numberEl || !expiryEl || !ccvEl) {
             console.error('找不到信用卡表單元素');
             return;
+          }
+          // 新增：每次 setup 欄位前都重新 setupSDK
+          if (window.TPDirect) {
+            const appId = import.meta.env.VITE_TAPPAY_APP_ID;
+            const appKey = import.meta.env.VITE_TAPPAY_APP_KEY;
+            window.TPDirect.setupSDK(Number(appId), appKey, 'sandbox');
           }
           window.TPDirect.card.setup({
             fields: {

@@ -19,12 +19,38 @@ import PackageList from './components/PackageList';
 import { Profile } from './components/Profile';
 import { fetchAiraloPackages, parseAiraloPackages, CountryPackageSummary, groupByCountry } from './data/packages';
 import { ALLOWED_COUNTRY_CODES } from './data/allowedCountryCodes';
+import { Routes, Route } from 'react-router-dom';
 
 // eSIM usage 快取型別
 type EsimUsage = {
   status: string;
   remaining: number;
   expired_at?: string;
+};
+
+// === 國碼對應 country background 圖檔 mapping ===
+const countryCodeToBg: Record<string, string> = {
+  JP: '日本.png',
+  KR: '韓國.png',
+  US: '美國.png',
+  HK: '香港.png',
+  MO: '澳門.png',
+  SG: '新加坡.png',
+  TH: '泰國.png',
+  VN: '越南.png',
+  MY: '馬來西亞.png',
+  CN: '中國.png',
+  PH: '菲律賓.png',
+  KH: '柬埔寨.png',
+  GB: '英國.png',
+  DE: '德國.png',
+  IT: '義大利.png',
+  ID: '印尼.png',
+  AS: '亞洲.png',
+  EU: '歐洲.png',
+  NA: '北美洲.png',
+  OC: '大洋洲.png',
+  AF: '非洲.png',
 };
 
 function App() {
@@ -67,6 +93,8 @@ function App() {
   // 新增 loadingPackageList 狀態
   const [loadingPackageList, setLoadingPackageList] = useState(false);
 
+  const esimListRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     async function loadPackages() {
       setLoading(true);
@@ -83,6 +111,26 @@ function App() {
       setLoading(false);
     }
     loadPackages();
+  }, []);
+
+  useEffect(() => {
+    const scripts = document.querySelectorAll('script');
+    scripts.forEach(s => {
+      console.log('[首頁 useEffect] script:', s.src || '[inline script]');
+    });
+  }, []);
+
+  useEffect(() => {
+    if ((window as any).TPDirect) return; // 已載入過就不重複載入
+    const script = document.createElement('script');
+    script.src = 'https://js.tappaysdk.com/sdk/tpdirect/v5.20.0';
+    script.async = true;
+    script.id = 'tappay-sdk';
+    document.body.appendChild(script);
+    return () => {
+      // 可選：離開網站時移除 script
+      // document.getElementById('tappay-sdk')?.remove();
+    };
   }, []);
 
   // Mock login/logout functions
@@ -206,8 +254,16 @@ function App() {
     ];
   };
 
+  // 追蹤 purchasedEsims 狀態變化，並自動 scroll 到最上方
+  useEffect(() => {
+    if (esimListRef.current) {
+      esimListRef.current.scrollTop = 0;
+    }
+    console.log('[LOG][App] purchasedEsims 狀態變化', purchasedEsims);
+  }, [purchasedEsims]);
+
   const handlePurchaseComplete = (iccid?: string) => {
-    console.log('[LOG] handlePurchaseComplete', selectedPackage, user);
+    console.log('[LOG][App] handlePurchaseComplete 執行', { selectedPackage, iccid, isTopUpFlow, purchasedEsims });
     if (selectedPackage) {
       if (isTopUpFlow) {
         // 找到原始的 eSIM
@@ -276,13 +332,41 @@ function App() {
           
           // 更新選中的套餐為更新後的 eSIM
           setSelectedPackage(updatedEsim);
+          // 新增：購買後主動查 usage 並寫入全域快取，避免 race condition
+          if (iccid) {
+            const USAGE_CACHE_KEY = '__esim_usage_cache__';
+            (async () => {
+              try {
+                const res = await fetch(`https://lcfsxxncgqrhjtbfmtig.supabase.co/functions/v1/airalo-get-usage?iccid=${iccid}`);
+                const json = await res.json();
+                if (json.data) {
+                  const usage = {
+                    status: json.data.status,
+                    remaining: json.data.remaining,
+                    expired_at: json.data.expired_at,
+                  };
+                  const globalCache = (window as any)[USAGE_CACHE_KEY] || {};
+                  (window as any)[USAGE_CACHE_KEY] = {
+                    ...globalCache,
+                    [iccid]: { data: usage, ts: Date.now() }
+                  };
+                  // 也寫入 localStorage
+                  const cacheKey = `__esim_usage_cache_${iccid}`;
+                  window.localStorage.setItem(cacheKey, JSON.stringify({ data: usage, ts: Date.now() }));
+                  console.log('[LOG][App] 購買後主動查 usage 並寫入快取', iccid, usage);
+                }
+              } catch (e) {
+                console.warn('[LOG][App] 購買後查 usage 失敗', iccid, e);
+              }
+            })();
+          }
         }
       } else {
         // 原有的新購買邏輯
         const newEsim = {
           ...selectedPackage,
           price: discountedPrice || selectedPackage.price,
-          status: 'active' as const,
+          status: 'ACTIVE' as const,
           activationDate: new Date().toISOString().split('T')[0],
           expiryDate: new Date(Date.now() + parseInt(selectedPackage.validity) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           usedData: '0 MB',
@@ -291,8 +375,37 @@ function App() {
           topUpCount: 0, // 初始化加購次數為 0
           iccid: iccid
         };
+        console.log('[LOG][App] 新增 newEsim', newEsim);
         setPurchasedEsims([newEsim, ...purchasedEsims]);
         setSelectedPackage(null);
+        // 新增：購買後主動查 usage 並寫入全域快取，避免 race condition
+        if (iccid) {
+          const USAGE_CACHE_KEY = '__esim_usage_cache__';
+          (async () => {
+            try {
+              const res = await fetch(`https://lcfsxxncgqrhjtbfmtig.supabase.co/functions/v1/airalo-get-usage?iccid=${iccid}`);
+              const json = await res.json();
+              if (json.data) {
+                const usage = {
+                  status: json.data.status,
+                  remaining: json.data.remaining,
+                  expired_at: json.data.expired_at,
+                };
+                const globalCache = (window as any)[USAGE_CACHE_KEY] || {};
+                (window as any)[USAGE_CACHE_KEY] = {
+                  ...globalCache,
+                  [iccid]: { data: usage, ts: Date.now() }
+                };
+                // 也寫入 localStorage
+                const cacheKey = `__esim_usage_cache_${iccid}`;
+                window.localStorage.setItem(cacheKey, JSON.stringify({ data: usage, ts: Date.now() }));
+                console.log('[LOG][App] 購買後主動查 usage 並寫入快取', iccid, usage);
+              }
+            } catch (e) {
+              console.warn('[LOG][App] 購買後查 usage 失敗', iccid, e);
+            }
+          })();
+        }
       }
     }
 
@@ -476,6 +589,15 @@ function App() {
             }
           }
           if (usage) newUsageMap[esim.iccid] = usage;
+          // 新增：寫入全域快取，讓詳細頁/安裝頁能共用
+          if (usage) {
+            const USAGE_CACHE_KEY = '__esim_usage_cache__';
+            const globalCache = (window as any)[USAGE_CACHE_KEY] || {};
+            (window as any)[USAGE_CACHE_KEY] = {
+              ...globalCache,
+              [esim.iccid]: { data: usage, ts: Date.now() }
+            };
+          }
         } catch {}
       }
       setUsageMap(newUsageMap);
@@ -493,12 +615,47 @@ function App() {
   });
 
   const renderMyEsims = () => {
-    // 直接平鋪所有已購買的 eSIM，不分國家卡片
+    // 先判斷有沒有購買過
     if (!mergedEsims || mergedEsims.length === 0) {
       return <div className="text-center text-gray-400 py-8">尚未購買 eSIM</div>;
     }
+    // 根據 tab 狀態篩選
+    const filteredEsims = mergedEsims.filter(esim =>
+      esimTab === 'current'
+        ? (esim.status === 'ACTIVE' || esim.status === 'NOT_ACTIVE')
+        : (esim.status === 'EXPIRED')
+    );
+    // 有購買但該類型沒資料
+    if (filteredEsims.length === 0) {
+      return (
+        <div className="space-y-8">
+          <div className="flex justify-between items-center">
+            <h2 className="text-3xl font-bold bg-line-gradient bg-clip-text text-transparent">
+              {t.myEsims}
+            </h2>
+          </div>
+          {/* 分頁 tab */}
+          <div className="flex gap-4 mb-4">
+            <button
+              className={`px-4 py-2 rounded-full font-semibold ${esimTab === 'current' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+              onClick={() => setEsimTab('current')}
+            >
+              {t.currentEsims || '目前 eSIM'}
+            </button>
+            <button
+              className={`px-4 py-2 rounded-full font-semibold ${esimTab === 'archived' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+              onClick={() => setEsimTab('archived')}
+            >
+              {t.archivedEsims || '已封存 eSIM'}
+            </button>
+          </div>
+          <div className="text-center text-gray-400 py-8">尚未有符合條件的 eSIM</div>
+        </div>
+      );
+    }
+    // 有購買且有符合條件的 eSIM
     return (
-      <div className="space-y-8">
+      <div ref={esimListRef} className="space-y-8" style={{overflowY: 'auto', maxHeight: '80vh'}}>
         <div className="flex justify-between items-center">
           <h2 className="text-3xl font-bold bg-line-gradient bg-clip-text text-transparent">
             {t.myEsims}
@@ -520,7 +677,7 @@ function App() {
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mergedEsims.map(esim => (
+          {filteredEsims.map(esim => (
             <PackageCard
               key={esim.iccid || esim.id}
               package={esim}
@@ -594,68 +751,91 @@ function App() {
               {countryPackages.map(pkg => (
                 <div
                   key={pkg.countryCode}
-                  className="bg-white rounded-2xl p-6 shadow-card hover:shadow-lg transition-shadow duration-300 cursor-pointer"
+                  className="bg-white rounded-2xl p-6 shadow-card hover:shadow-lg transition-shadow duration-300 cursor-pointer flex flex-col items-center"
                   onClick={() => {
-                    console.log('[LOG] 點擊卡片', pkg);
                     setSelectedPackage(pkg);
                     setLoadingPackageList(true);
                     setSelectedCountryPackages([]);
                     setTimeout(() => {
-                      console.log('[LOG] setShowPackageList(true)');
                       setShowPackageList(true);
                     }, 0);
                   }}
                 >
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="relative w-10 h-8 bg-white rounded-xl overflow-hidden shadow-sm p-0.5">
-                      <img
-                        src={`https://flagcdn.com/${pkg.countryCode.toLowerCase()}.svg`}
-                        alt={pkg.country}
-                        className="w-full h-full object-cover"
-                        style={{
-                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
-                          imageRendering: 'crisp-edges'
-                        }}
-                      />
-                    </div>
-                    <h3 className="text-xl font-bold">{pkg.country}</h3>
+                  {/* 國家小圖與名稱 */}
+                  <div className="flex items-center gap-3 mb-2 w-full justify-center">
+                    <img
+                      src={`https://flagcdn.com/${pkg.countryCode.toLowerCase()}.svg`}
+                      alt={pkg.country}
+                      className="w-12 h-12 object-cover rounded shadow"
+                    />
+                    <span className="text-2xl font-bold text-gray-900">{pkg.country}</span>
                   </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-gray-600">數據區間：</span>
-                    <span className="font-medium">{pkg.dataRange ?? '—'}</span>
+                  {/* 三個橢圓框只顯示 label，value 移到下方且變小變灰 */}
+                  <div className="flex gap-3 mb-1 w-full justify-center">
+                    <span className="px-3 py-1 rounded-full border border-gray-200 bg-white text-gray-700 text-sm font-semibold min-w-[80px] text-center">電信商</span>
+                    <span className="px-3 py-1 rounded-full border border-gray-200 bg-white text-gray-700 text-sm font-semibold min-w-[80px] text-center">有效期間</span>
+                    <span className="px-3 py-1 rounded-full border border-gray-200 bg-white text-gray-700 text-sm font-semibold min-w-[80px] text-center">數據區間</span>
                   </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-gray-600">有效期間：</span>
-                    <span className="font-medium">{pkg.validityRange ?? '—'}</span>
+                  <div className="flex gap-3 mb-2 w-full justify-center">
+                    <span className="block min-w-[80px] text-center text-xs text-gray-500 font-normal">{pkg.operators?.[0] || '—'}</span>
+                    <span className="block min-w-[80px] text-center text-xs text-gray-500 font-normal">{pkg.validityRange ? pkg.validityRange.replace('～', '-') : '—'}</span>
+                    <span className="block min-w-[80px] text-center text-xs text-gray-500 font-normal">{pkg.dataRange ? pkg.dataRange.replace('～', '-') : '—'}</span>
                   </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-gray-600">電信商：</span>
-                    <span className="font-medium">{Array.isArray(pkg.operators) && pkg.operators.length > 0 ? pkg.operators.join('、') : '—'}</span>
+                  {/* 中間背景圖，調整為更寬且無外框 */}
+                  <div className="w-full flex justify-center my-4">
+                    <img
+                      src={countryCodeToBg[pkg.countryCode] ? `/country background/${countryCodeToBg[pkg.countryCode]}` : '/country background/default.png'}
+                      alt={pkg.country}
+                      className="w-full max-w-[340px] h-32 object-cover rounded-xl"
+                      style={{ boxShadow: 'none', border: 'none' }}
+                    />
                   </div>
-                  {/* 社群/導航/影音區塊 */}
-                  <div className="flex flex-col gap-1 ml-2">
-                    <div className="flex items-center gap-1">
-                      <img src="https://www.svgrepo.com/show/452229/instagram-1.svg" alt="Instagram" className="w-4 h-4" />
-                      <span className="text-xs text-gray-600">可上傳圖片貼文：350~1050</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <img src="https://www.svgrepo.com/show/452196/facebook-1.svg" alt="Facebook" className="w-4 h-4" />
-                      <span className="text-xs text-gray-600">可上傳圖片貼文：250~750</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/threads.svg" alt="Threads" className="w-4 h-4" />
-                      <span className="text-xs text-gray-600">可上傳圖片貼文：330~990</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <img src="https://icons.iconarchive.com/icons/dtafalonso/android-lollipop/512/Maps-icon.png" alt="Google Maps" className="w-4 h-4" />
-                      <span className="text-xs text-gray-600">可使用導航時間：200~600小時</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <img src="https://upload.wikimedia.org/wikipedia/commons/4/42/YouTube_icon_%282013-2017%29.png" alt="YouTube" className="w-4 h-4" />
-                      <span className="text-xs text-gray-600">可觀看時間：3~9小時 (360p標準畫質)</span>
-                    </div>
+                  {/* 五個 brand logo，縮小且移除 30小時，並在下方顯示小時區間 */}
+                  <div className="flex w-full justify-between items-end mb-4 px-2">
+                    {(() => {
+                      // 取所有 data，轉 MB
+                      const datas = (pkg.packages || []).map(p => (p.data || '').replace(/\s+/g, '').toUpperCase());
+                      const mbs = datas.map(d => d.endsWith('GB') ? parseFloat(d) * 1024 : d.endsWith('MB') ? parseFloat(d) : 0).filter(n => !isNaN(n) && n > 0);
+                      const minMB = Math.min(...mbs);
+                      const maxMB = Math.max(...mbs);
+                      // 先除以5
+                      const minBase = Math.round(minMB / 5);
+                      const maxBase = Math.round(maxMB / 5);
+                      // 各 logo 一小時用量
+                      const logoUsage = [
+                        { label: 'YouTube', file: 'youtube.png', usage: 1024 },
+                        { label: 'Google Map', file: 'google_map.png', usage: 15 },
+                        { label: 'Facebook', file: 'facebook.png', usage: 180 },
+                        { label: 'Instagram', file: 'ig.png', usage: 180 },
+                        { label: 'Threads', file: 'thread.png', usage: 120 },
+                      ];
+                      return logoUsage.map(brand => {
+                        const minH = minBase && brand.usage ? (minBase / brand.usage) : 0;
+                        const maxH = maxBase && brand.usage ? (maxBase / brand.usage) : 0;
+                        let text = '-';
+                        if (minH && maxH) {
+                          text = minH === maxH ? `${minH.toFixed(1)}` : `${minH.toFixed(1)}-${maxH.toFixed(1)}`;
+                        } else if (minH) {
+                          text = minH.toFixed(1);
+                        } else if (maxH) {
+                          text = maxH.toFixed(1);
+                        }
+                        return (
+                          <div key={brand.label} className="flex flex-col items-center w-1/5">
+                            <img
+                              src={`/brand logo/${brand.file}`}
+                              alt={brand.label}
+                              className="w-4 h-4 object-contain mb-1"
+                            />
+                            <span className="text-[10px] text-gray-500 leading-tight">{text}</span>
+                            <span className="text-[10px] text-gray-400 leading-tight">小時</span>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
-                  <button className="mt-4 w-full bg-[#4CD964] text-white py-2 rounded-lg font-bold hover:bg-[#43c05c] transition">
+                  {/* 選擇按鈕 */}
+                  <button className="mt-2 w-full bg-[#4CD964] text-white py-2 rounded-lg font-bold hover:bg-[#43c05c] transition">
                     選擇
                   </button>
                 </div>
@@ -715,7 +895,13 @@ function App() {
       
       <main className="container mx-auto px-4 pt-20 pb-24">
         <div className="max-w-7xl mx-auto">
-          {activeTab === 'esims' ? renderMyEsims() : renderContent()}
+          <Routes>
+            <Route path="/faq" element={<FAQ onBack={() => window.history.back()} />} />
+            <Route path="/privacypolicy" element={<PrivacyPolicy onBack={() => window.history.back()} />} />
+            <Route path="/profile" element={<Profile onAddCard={() => setShowSaveCard(true)} onShowTerms={() => {}} onShowPrivacy={() => {}} onShowFAQ={() => {}} />} />
+            <Route path="/terms" element={<TermsAndConditions onBack={() => window.history.back()} />} />
+            <Route path="*" element={activeTab === 'esims' ? renderMyEsims() : renderContent()} />
+          </Routes>
         </div>
       </main>
 

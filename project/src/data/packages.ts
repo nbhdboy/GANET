@@ -258,6 +258,7 @@ export function groupByCountry(packages: any[]) {
   return Array.from(map.entries()).map(([countryCode, pkgs]) => {
     const countryInfo = TARGET_COUNTRIES_BY_CODE[countryCode] || { zh: countryCode, flag: '' };
     const operators = [...new Set(pkgs.map(p => p.operator))];
+    console.log(`[groupByCountry] ${countryCode} pkgs data:`, pkgs.map(p => p.data));
     // 計算數據區間
     let minData = Infinity, maxData = 0, hasUnlimited = false;
     let minDay = Infinity, maxDay = 0;

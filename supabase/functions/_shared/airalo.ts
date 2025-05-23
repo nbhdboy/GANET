@@ -256,7 +256,7 @@ export async function getAiraloInstallInstructions(iccid: string, language: stri
       function pickLatest(arr) {
         if (!arr || arr.length === 0) return null;
         const withVersion = arr.filter(item => item.version);
-        if (withVersion.length === 0) return arr[0];
+        if (withVersion.length === 0) return arr[1] || arr[0] || null;
         let latest = null;
         let latestVersion = -Infinity;
         for (const item of withVersion) {
@@ -296,7 +296,7 @@ export async function getAiraloInstallInstructions(iccid: string, language: stri
         if (!arr || arr.length === 0) return null;
         // 過濾有 version 的
         const withVersion = arr.filter(item => item.version);
-        if (withVersion.length === 0) return arr[0];
+        if (withVersion.length === 0) return arr[1] || arr[0] || null;
         let latest = null;
         let latestVersion = -Infinity;
         for (const item of withVersion) {

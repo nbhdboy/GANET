@@ -4,15 +4,17 @@ import { useStore } from '../store';
 import { translations } from '../i18n';
 import type { SavedCard } from '../types';
 import { DeletingOverlay } from './LoadingOverlay';
+import { useNavigate } from 'react-router-dom';
 
 console.log('App render');
 
-export function Profile({ onAddCard, onShowTerms, onShowPrivacy, onShowFAQ }) {
+export function Profile({ onAddCard }) {
   const { language, user, savedCards, updateUserCards, fetchUserCards } = useStore();
   const [localCards, setLocalCards] = useState<SavedCard[]>(user?.savedCards || []);
   const t = translations[language];
   const [isDeleting, setIsDeleting] = useState(false);
   const [showEditCardAlert, setShowEditCardAlert] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // 當 user 或 savedCards 變動時，強制同步 localCards
@@ -149,13 +151,13 @@ export function Profile({ onAddCard, onShowTerms, onShowPrivacy, onShowFAQ }) {
 
           <div className="space-y-4">
             <button 
-              onClick={onShowTerms}
+              onClick={() => navigate('/terms')}
               className="w-full text-left p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
             >
               {t.termsAndConditions}
             </button>
             <button 
-              onClick={onShowPrivacy}
+              onClick={() => navigate('/privacypolicy')}
               className="w-full text-left p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
             >
               {t.privacyPolicy}
@@ -167,7 +169,7 @@ export function Profile({ onAddCard, onShowTerms, onShowPrivacy, onShowFAQ }) {
               {t.customerService}
             </button>
             <button 
-              onClick={onShowFAQ}
+              onClick={() => navigate('/faq')}
               className="w-full text-left p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
             >
               {t.faq}

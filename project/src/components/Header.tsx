@@ -17,10 +17,10 @@ export function Header({ onMenuClick, onLogout }: HeaderProps) {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 bg-[#E6F9EC] text-green-900 shadow-lg z-50">
+    <header className="fixed top-0 left-0 w-full z-40 bg-transparent shadow-sm" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.04)' }}>
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2 h-16">
-          <img src="/icons/logo.png" alt="CANET Logo" className="h-16 ml-1" style={{height: '60px', marginTop: '-16px'}} />
+          <img src="/icons/logo.png" alt="CANET Logo" className="h-10 ml-1" style={{height: '40px', marginTop: '-4px'}} />
         </div>
         
         {/* <h1 className="text-xl font-bold">{t.title}</h1> */}
@@ -28,14 +28,14 @@ export function Header({ onMenuClick, onLogout }: HeaderProps) {
         <div className="flex items-center gap-2">
           <button 
             onClick={handleLanguageChange}
-            className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 rounded-full transition-all duration-200 active:scale-95"
+            className="flex items-center gap-2 px-3 py-1.5 hover:bg-black/5 rounded-full transition-all duration-200 active:scale-95"
             aria-label={language === 'en' ? '切換到中文' : 'Switch to English'}
           >
             <svg 
               viewBox="0 0 24 24" 
               fill="none" 
               stroke="currentColor" 
-              className="w-5 h-5"
+              className="w-5 h-5 text-black"
             >
               <path
                 d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"
@@ -62,7 +62,7 @@ export function Header({ onMenuClick, onLogout }: HeaderProps) {
                 strokeLinejoin="round"
               />
             </svg>
-            <span className="text-sm font-medium">{language === 'en' ? 'English' : '中文'}</span>
+            <span className="text-sm font-medium text-black">{language === 'en' ? 'English' : '中文'}</span>
           </button>
           
           {user ? (
@@ -81,15 +81,6 @@ export function Header({ onMenuClick, onLogout }: HeaderProps) {
                   <User size={24} />
                 )}
               </button>
-              {onLogout && (
-                <button 
-                  onClick={onLogout}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                  aria-label={t.logout}
-                >
-                  <LogOut size={24} />
-                </button>
-              )}
             </>
           ) : null}
         </div>

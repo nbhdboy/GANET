@@ -34,6 +34,11 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
   const setupCompleted = useRef(false);
 
   useEffect(() => {
+    // 進入結帳頁時，log 所有 script 標籤
+    const scripts = document.querySelectorAll('script');
+    scripts.forEach(s => {
+      console.log('[結帳頁 useEffect] script:', s.src || '[inline script]');
+    });
     console.log('【DEBUG】PaymentPage user:', user);
     console.log('【DEBUG】PaymentPage user?.savedCards:', user?.savedCards);
     if (user?.savedCards?.length > 0) {
@@ -45,51 +50,32 @@ export const PaymentPage: FC<PaymentPageProps> = ({ package: pkg, onClose, onPur
   }, [user?.savedCards]);
 
   useEffect(() => {
-    // 先移除所有舊的 TapPay script
-    document.querySelectorAll('script[src*="tappaysdk.com"]').forEach(s => s.remove());
-
-    // 再插入新 script
-    const script = document.createElement('script');
-    script.src = 'https://js.tappaysdk.com/sdk/tpdirect/v5.20.0';
-    script.async = true;
-    script.id = 'tappay-sdk';
-    document.body.appendChild(script);
-
     let isMounted = true;
-    
-    script.onload = async () => {
-        // 等待 TPDirect 可用
-        let retries = 0;
-        const maxRetries = 10;
-        while (!window.TPDirect && retries < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          retries++;
-        }
-        if (!window.TPDirect) {
-        console.error('TapPay SDK not loaded after multiple retries');
-        return;
-        }
-      // 初始化 SDK
-        const appId = import.meta.env.VITE_TAPPAY_APP_ID;
-        const appKey = import.meta.env.VITE_TAPPAY_APP_KEY;
-      window.TPDirect.setupSDK(Number(appId), appKey, 'sandbox');
-          if (isMounted) {
-            setIsTapPayReady(true);
-          }
+    const waitForTPDirect = async () => {
+      let retries = 0;
+      const maxRetries = 20;
+      while (!(window as any).TPDirect && retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        retries++;
+      }
+      if ((window as any).TPDirect && isMounted) {
+        setIsTapPayReady(true);
+      }
     };
-
-    return () => {
-      isMounted = false;
-      setIsTapPayReady(false);
-      document.querySelectorAll('script#tappay-sdk').forEach(s => s.remove());
-      setupCompleted.current = false;
-    };
+    waitForTPDirect();
+    return () => { isMounted = false; };
   }, []);
 
   useEffect(() => {
     if (selectedMethod === 'card' && isTapPayReady && !setupCompleted.current) {
       const setupCard = async () => {
         try {
+          // 新增：每次 setup 欄位前都重新 setupSDK
+          if (window.TPDirect) {
+            const appId = import.meta.env.VITE_TAPPAY_APP_ID;
+            const appKey = import.meta.env.VITE_TAPPAY_APP_KEY;
+            window.TPDirect.setupSDK(Number(appId), appKey, 'sandbox');
+          }
           // 等待 DOM 元素準備就緒
           await new Promise(resolve => setTimeout(resolve, 500));
           

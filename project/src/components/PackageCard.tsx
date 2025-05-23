@@ -19,6 +19,31 @@ interface PackageCardProps {
   onShowInstallInstructions?: (iccid?: string) => void;
 }
 
+// === 國碼對應 country background 圖檔 mapping ===
+const countryCodeToBg: Record<string, string> = {
+  JP: '日本.png',
+  KR: '韓國.png',
+  US: '美國.png',
+  HK: '香港.png',
+  MO: '澳門.png',
+  SG: '新加坡.png',
+  TH: '泰國.png',
+  VN: '越南.png',
+  MY: '馬來西亞.png',
+  CN: '中國.png',
+  PH: '菲律賓.png',
+  KH: '柬埔寨.png',
+  GB: '英國.png',
+  DE: '德國.png',
+  IT: '義大利.png',
+  ID: '印尼.png',
+  AS: '亞洲.png',
+  EU: '歐洲.png',
+  NA: '北美洲.png',
+  OC: '大洋洲.png',
+  AF: '非洲.png',
+};
+
 export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstallInstructions }: PackageCardProps) {
   const { language } = useStore();
   const t = translations[language];
@@ -172,13 +197,13 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
           </span>
           <div className="flex gap-2">
             <button 
-              className="bg-button-gradient hover:bg-button-gradient-hover text-white px-4 py-2 rounded-full transition-all duration-300 shadow-button hover:shadow-lg text-sm"
+              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full transition-all duration-300 text-sm"
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(pkg);
               }}
             >
-              {isPurchased ? t.viewDetails : t.select}
+              {isPurchased ? '查看用量' : t.select}
             </button>
             {onShowInstallInstructions && (
               <button
@@ -188,7 +213,7 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
                   onShowInstallInstructions(pkg.iccid);
                 }}
               >
-                安裝說明
+                前往安裝
               </button>
             )}
           </div>

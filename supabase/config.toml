@@ -187,7 +187,7 @@ enabled = true
 entrypoint = "./functions/airalo-webhook/index.ts"
 verify_jwt = false
 
-[functions.line-userid-webhook]
+[functions.line-gemini-faq-bot]
 enabled = true
-entrypoint = "./functions/line-userid-webhook/index.ts"
+entrypoint = "./functions/line-gemini-faq-bot/index.ts"
 verify_jwt = false

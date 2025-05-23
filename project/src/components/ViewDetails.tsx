@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ArrowLeft, Signal, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Signal, Calendar, ChevronLeft, ChevronRight, CreditCard, Wifi, Clock } from 'lucide-react';
 import type { ESIMPackage } from '../types';
 import { useStore } from '../store';
 import { translations } from '../i18n';
@@ -71,18 +71,22 @@ export function ViewDetails({
 
   useEffect(() => {
     if (!pkg.iccid) return;
-    console.log('fetch usage', pkg.iccid);
     setUsageLoading(true);
     setUsageError('');
 
+    // 先檢查主頁卡片的全域快取
     const USAGE_CACHE_KEY = '__esim_usage_cache__';
     const cache = (window as any)[USAGE_CACHE_KEY] || {};
     const now = Date.now();
     const cacheItem = cache[pkg.iccid];
+    console.log('[詳細頁] 查詢 usage，ICCID:', pkg.iccid, '全域快取內容:', cache, 'cacheItem:', cacheItem);
     if (cacheItem && now - cacheItem.ts < 15 * 60 * 1000) {
+      console.log('[詳細頁] 命中主頁快取，不發API', cacheItem);
       setUsage(cacheItem.data);
       setUsageLoading(false);
       return;
+    } else {
+      console.log('[詳細頁] 沒命中快取，會發API');
     }
     fetch(`https://lcfsxxncgqrhjtbfmtig.supabase.co/functions/v1/airalo-get-usage?iccid=${pkg.iccid}`)
       .then(res => res.json())
@@ -439,38 +443,73 @@ export function ViewDetails({
                 }}
               >
                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4 mx-2 h-full">
-                  <div className="space-y-3">
-                    <div>
-                      <span className="text-sm text-gray-500">{t.data}</span>
-                      <h4 className="text-2xl font-bold">{topUpPkg.data}</h4>
+                  <div className="flex w-full justify-between mb-4">
+                    <div className="flex flex-col items-center w-1/3">
+                      <CreditCard className="text-green-500 mb-1" size={24} />
+                      <span className="text-black text-sm mb-1">價格</span>
+                      <span className="font-normal text-gray-500 text-lg">${topUpPkg.sell_price ? Number(topUpPkg.sell_price).toFixed(1) : '-'}</span>
                     </div>
-                    <div>
-                      <span className="text-sm text-gray-500">有效期間</span>
-                      <p className="text-2xl font-bold">{topUpPkg.day} 天</p>
+                    <div className="flex flex-col items-center w-1/3">
+                      <Wifi className="text-green-500 mb-1" size={24} />
+                      <span className="text-black text-sm mb-1">數據</span>
+                      <span className="font-normal text-gray-500 text-lg">{topUpPkg.data}</span>
                     </div>
-                    <div>
-                      <span className="text-sm text-gray-500">{t.price}</span>
-                      <p className="text-xl font-bold text-green-600">
-                        ${topUpPkg.sell_price ? Number(topUpPkg.sell_price).toFixed(1) : '-'}
-                      </p>
+                    <div className="flex flex-col items-center w-1/3">
+                      <Clock className="text-green-500 mb-1" size={24} />
+                      <span className="text-black text-sm mb-1">效期</span>
+                      <span className="font-normal text-gray-500 text-lg">{topUpPkg.day}天</span>
                     </div>
-                    <div className="space-y-2">
-                      <button 
-                        onClick={(e) => handleTopUp(e, topUpPkg)}
-                        className="w-full py-3 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full text-sm hover:from-green-500 hover:to-green-600 transition-all duration-300"
-                      >
-                        {t.topUp}
-                      </button>
-                      <div className="flex justify-center gap-2 pt-2">
-                        {sortedTopUpPackages.map((_, idx) => (
-                          <div
-                            key={idx}
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                              idx === currentTopUpIndex ? 'w-2 bg-green-500' : 'w-2 bg-gray-300'
-                            }`}
-                          />
-                        ))}
-                      </div>
+                  </div>
+                  {/* brand logo 一排＋小時數 */}
+                  <div className="flex w-full justify-between items-end mb-4 px-2">
+                    {(() => {
+                      // 解析 data 轉 MB
+                      const dataStr = (topUpPkg.data || '').replace(/\s+/g, '').toUpperCase();
+                      let mb = 0;
+                      if (dataStr.endsWith('GB')) mb = parseFloat(dataStr) * 1024;
+                      else if (dataStr.endsWith('MB')) mb = parseFloat(dataStr);
+                      // 先除以5
+                      const base = Math.round(mb / 5);
+                      // 各 logo 一小時用量
+                      const logoUsage = [
+                        { label: 'YouTube', file: 'youtube.png', usage: 1024 },
+                        { label: 'Google Map', file: 'google_map.png', usage: 15 },
+                        { label: 'Facebook', file: 'facebook.png', usage: 180 },
+                        { label: 'Instagram', file: 'ig.png', usage: 180 },
+                        { label: 'Threads', file: 'thread.png', usage: 120 },
+                      ];
+                      return logoUsage.map(brand => {
+                        const hours = base && brand.usage ? (base / brand.usage) : 0;
+                        return (
+                          <div key={brand.label} className="flex flex-col items-center w-1/5">
+                            <img
+                              src={`/brand logo/${brand.file}`}
+                              alt={brand.label}
+                              className="w-4 h-4 object-contain mb-1"
+                            />
+                            <span className="text-[10px] text-gray-500 leading-tight">{hours ? hours.toFixed(1) : '-'}</span>
+                            <span className="text-[10px] text-gray-400 leading-tight">小時</span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                  <div className="space-y-2">
+                    <button 
+                      onClick={(e) => handleTopUp(e, topUpPkg)}
+                      className="w-full py-3 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-[16px] text-sm hover:from-green-500 hover:to-green-600 transition-all duration-300"
+                    >
+                      {t.topUp}
+                    </button>
+                    <div className="flex justify-center gap-2 pt-2">
+                      {sortedTopUpPackages.map((_, idx) => (
+                        <div
+                          key={idx}
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            idx === currentTopUpIndex ? 'w-2 bg-green-500' : 'w-2 bg-gray-300'
+                          }`}
+                        />
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -484,16 +523,20 @@ export function ViewDetails({
 
   return (
     <div className="fixed inset-0 bg-gray-50 z-50 overflow-y-auto pb-[60px]">
-      <div className="bg-line-gradient text-white sticky top-0 z-20">
+      <div className="bg-line-gradient text-white sticky top-0 z-50">
         <div className="container mx-auto px-4">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 py-4"
-          >
-            <ArrowLeft size={20} />
-            {t.back}
-          </button>
-          <h1 className="text-2xl font-bold pb-6">{pkg.name}</h1>
+          <div className="flex items-center justify-between py-4 relative">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft size={20} />
+              {t.back}
+            </button>
+            <div className="absolute left-0 right-0 flex justify-center pointer-events-none">
+              <h1 className="text-2xl font-bold pb-0 text-center pointer-events-none">{pkg.name}</h1>
+            </div>
+          </div>
         </div>
       </div>
 
