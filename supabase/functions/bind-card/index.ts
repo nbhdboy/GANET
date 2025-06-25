@@ -187,7 +187,22 @@ serve(async (req) => {
         JSON.stringify({
           status: 0,
           msg: 'Success',
-          card: data
+          card: {
+            id: data.id || null, // 若有 uuid id 就回傳
+            last_four: tappayData.card_info.last_four,
+            brand: (() => {
+              const cardTypes = {
+                1: 'VISA',
+                2: 'Mastercard',
+                3: 'JCB',
+                4: 'Union Pay',
+                5: 'AMEX'
+              };
+              return cardTypes[tappayData.card_info.type] || 'Unknown';
+            })(),
+            expiry_month: tappayData.card_info.expiry_date.substring(4, 6),
+            expiry_year: tappayData.card_info.expiry_date.substring(2, 4)
+          }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

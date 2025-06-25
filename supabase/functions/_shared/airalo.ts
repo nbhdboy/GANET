@@ -44,9 +44,14 @@ export async function getAiraloAccessToken() {
     try {
       // Upstash 會包成 JSON 格式
       const parsed = JSON.parse(cached);
-      if (parsed.value) return parsed.value;
+      if (parsed.value) {
+        console.log('[AiraloToken][Redis] 取得快取 token:', parsed.value.slice(0, 8) + '...');
+        return parsed.value;
+      }
+      console.log('[AiraloToken][Redis] 取得快取 token:', cached.slice(0, 8) + '...');
       return cached;
     } catch {
+      console.log('[AiraloToken][Redis] 取得快取 token:', cached.slice(0, 8) + '...');
       return cached;
     }
   }
@@ -66,11 +71,11 @@ export async function getAiraloAccessToken() {
   });
 
   // 印出 status、headers
-  console.log('Airalo fetch status:', response.status);
-  console.log('Airalo fetch headers:', Array.from(response.headers.entries()));
+  console.log('[AiraloToken][申請] status:', response.status);
+  console.log('[AiraloToken][申請] headers:', Array.from(response.headers.entries()));
 
   const text = await response.text();
-  console.log('Airalo fetch body:', text);
+  console.log('[AiraloToken][申請] body:', text);
   let data;
   try {
     data = JSON.parse(text);
@@ -80,10 +85,12 @@ export async function getAiraloAccessToken() {
 
   // 檢查是否有錯誤訊息
   if (data.code && data.message) {
+    console.log('[AiraloToken][申請] 錯誤:', data.code, data.message);
     throw new Error(`Airalo API 錯誤: ${data.code} ${data.message} | 原始回應: ${text}`);
   }
 
   if (!data.data || !data.data.access_token || !data.data.expires_in) {
+    console.log('[AiraloToken][申請] 缺少 access_token 或 expires_in:', text);
     throw new Error('Airalo 回傳內容缺少 access_token 或 expires_in | 原始回應: ' + text);
   }
 
@@ -92,16 +99,20 @@ export async function getAiraloAccessToken() {
   const expireIn = data.data.expires_in - 60; // 秒
   await redisSet("airalo_access_token", token, expireIn);
 
+  console.log('[AiraloToken][申請] 取得新 token:', token.slice(0, 8) + '...');
   return token;
 }
 
 // Airalo 下單 API 共用函式
-export async function submitAiraloOrder({ package_id, quantity = 1, description }) {
+export async function submitAiraloOrder({ package_id, quantity = 1, description, brand_settings_name = 'CANET' }) {
   let token = await getAiraloAccessToken();
   let body = new FormData();
   body.append('package_id', package_id);
   body.append('quantity', String(quantity));
   body.append('description', description);
+  if (brand_settings_name) {
+    body.append('brand_settings_name', brand_settings_name);
+  }
   let response = await fetch('https://sandbox-partners-api.airalo.com/v2/orders', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },

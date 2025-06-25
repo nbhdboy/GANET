@@ -13,12 +13,14 @@ interface SaveCardPageProps {
 
 export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProps) {
   console.log('SaveCardPage rendered', show);
-  const { language, updateUserCards, userCards: _userCards, user, setUser } = useStore();
+  const { language, updateUserCards, userCards: _userCards, user, setUser, fetchUserCards } = useStore();
   const userCards = _userCards ?? [];
   const t = translations[language];
+  const t_sc = t.saveCard;
   const [isCardValid, setIsCardValid] = useState(false);
   const [isTapPayReady, setIsTapPayReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const setupCompleted = useRef(false);
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -75,15 +77,15 @@ export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProp
             fields: {
               number: {
                 element: '#card-number',
-                placeholder: '**** **** **** ****'
+                placeholder: t_sc.cardNumberPlaceholder
               },
               expirationDate: {
                 element: '#card-expiration-date',
-                placeholder: 'MM / YY'
+                placeholder: t_sc.expiryDatePlaceholder
               },
               ccv: {
                 element: '#card-ccv',
-                placeholder: '後三碼'
+                placeholder: t_sc.securityCodePlaceholder
               }
             },
             styles: {
@@ -121,17 +123,17 @@ export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProp
             } else {
               setIsCardValid(false);
               if (update.status.number === 2) {
-                setErrorMessage('卡號無效');
+                setErrorMessage(t_sc.errorInvalidCardNumber);
               } else if (update.status.expiry === 2) {
-                setErrorMessage('有效期無效');
+                setErrorMessage(t_sc.errorInvalidExpiryDate);
               } else if (update.status.ccv === 2) {
-                setErrorMessage('安全碼無效');
+                setErrorMessage(t_sc.errorInvalidSecurityCode);
               }
             }
           });
         } catch (error) {
           console.error('設置信用卡表單時發生錯誤:', error);
-          setErrorMessage('初始化支付表單失敗，請刷新頁面重試');
+          setErrorMessage(t_sc.errorInitFailed);
         }
       };
       setupCard();
@@ -149,13 +151,14 @@ export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
     try {
       console.log('開始信用卡綁定流程');
       const tappayStatus = window.TPDirect.card.getTappayFieldsStatus();
       
       if (!tappayStatus.canGetPrime) {
-        throw new Error('請確認信用卡資訊是否正確填寫');
+        throw new Error(t_sc.errorIncorrectInfo);
       }
 
       // 取得 Prime
@@ -163,7 +166,7 @@ export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProp
         window.TPDirect.card.getPrime((r) => {
           console.log('getPrime raw result →', r);
           if (r.status !== 0) {
-            reject(new Error(r.msg || '取得 prime 失敗'));
+            reject(new Error(r.msg || t_sc.errorGetPrimeFailed));
             return;
           }
           resolve(r);
@@ -174,7 +177,7 @@ export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProp
       const prime = (result as any).card?.prime ?? (result as any).prime;
       
       if (!prime) {
-        throw new Error('取得 prime 失敗');
+        throw new Error(t_sc.errorGetPrimeFailed);
       }
 
       console.log('prime to be sent →', prime);
@@ -183,7 +186,7 @@ export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProp
       const apiUrl = import.meta.env.VITE_API_URL;
 
       if (!apiUrl) {
-        throw new Error('缺少必要的環境變數設定');
+        throw new Error(t_sc.errorMissingEnv);
       }
 
       console.log('TapPay 回應:', result);
@@ -227,56 +230,76 @@ export function SaveCardPage({ onSave, onClose, show = false }: SaveCardPageProp
       }
       
       // 更新儲存的卡片資訊
-      const newCard: SavedCard = {
-        id: responseData.card.card_key,
+      const newCard = {
+        id: responseData.card.id,
         last4: responseData.card.last_four,
         brand: responseData.card.brand,
         expiryMonth: responseData.card.expiry_month,
-        expiryYear: responseData.card.expiry_year,
-        token: responseData.card.card_token,
-        cardKey: responseData.card.card_key
+        expiryYear: responseData.card.expiry_year
       };
-
       updateUserCards([newCard]);
       if (user && setUser) {
         setUser({ ...user, savedCards: [newCard] });
       }
+      
+      // 觸發重新整理
+      if (fetchUserCards) {
+        await fetchUserCards();
+      }
+
       onSave();
     } catch (error) {
       console.error('儲存信用卡時發生錯誤:', error);
-      setErrorMessage(error instanceof Error ? error.message : '儲存信用卡失敗');
+      setErrorMessage(error instanceof Error ? error.message : t_sc.errorSaveFailed);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   if (!show) return null;
   return (
-    <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999}}>
-      <div style={{background: 'white', padding: 40, borderRadius: 12, maxWidth: 400, margin: '40px auto'}}>
-        <h2 style={{fontWeight: 'bold', fontSize: 20, marginBottom: 24}}>新增／編輯信用卡</h2>
+    <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+      <div style={{background: 'white', padding: 40, borderRadius: 12, maxWidth: 400, width: '100%', boxSizing: 'border-box', margin: 0}}>
+        <h2 style={{fontWeight: 'bold', fontSize: 20, marginBottom: 24, textAlign: 'center'}}>{t_sc.title}</h2>
         <form onSubmit={handleSubmit}>
           <div style={{marginBottom: 16}}>
-            <label style={{display: 'block', marginBottom: 4}}>卡號</label>
+            <label style={{display: 'block', marginBottom: 4}}>{t_sc.cardNumber}</label>
             <div id="card-number" style={{height: 40, border: '1px solid #ccc', borderRadius: 6, padding: 8}}></div>
           </div>
           <div style={{display: 'flex', gap: 8, marginBottom: 0, alignItems: 'flex-start'}}>
             <div style={{flex: 1, minWidth: 0}}>
-              <label style={{display: 'block', marginBottom: 4}}>有效期限</label>
+              <label style={{display: 'block', marginBottom: 4}}>{t_sc.expiryDate}</label>
               <div id="card-expiration-date" style={{height: 40, border: '1px solid #ccc', borderRadius: 6, padding: 8}}></div>
             </div>
             <div style={{width: 120, minWidth: 100}}>
-              <label style={{display: 'block', marginBottom: 4}}>安全碼</label>
+              <label style={{display: 'block', marginBottom: 4}}>{t_sc.securityCode}</label>
               <div id="card-ccv" style={{height: 40, border: '1px solid #ccc', borderRadius: 6, padding: 8}}></div>
             </div>
           </div>
           <div style={{fontSize: 12, color: '#888', marginTop: 4, marginBottom: 12, textAlign: 'left', lineHeight: 1.4, marginLeft: 0, paddingLeft: 0}}>
-            安全碼僅用於本次驗證，不會被儲存
+            {t_sc.securityCodeInfo}
           </div>
           {errorMessage && (
             <div style={{color: 'red', marginBottom: 12}}>{errorMessage}</div>
           )}
           <div style={{display: 'flex', gap: 8, marginTop: 24}}>
-            <button type="button" onClick={onClose} style={{flex: 1, padding: 12, borderRadius: 6, background: '#eee', border: 'none'}}>取消</button>
-            <button type="submit" style={{flex: 1, padding: 12, borderRadius: 6, background: '#4CD964', color: '#fff', border: 'none'}}>儲存</button>
+            <button type="button" onClick={onClose} style={{flex: 1, padding: 12, borderRadius: 6, background: '#eee', border: 'none'}} disabled={isSubmitting}>{t_sc.cancel}</button>
+            <button 
+              type="submit" 
+              style={{
+                flex: 1, 
+                padding: 12, 
+                borderRadius: 6, 
+                background: '#4CD964', 
+                color: '#fff', 
+                border: 'none',
+                opacity: (!isCardValid || isSubmitting) ? 0.5 : 1,
+                cursor: (!isCardValid || isSubmitting) ? 'not-allowed' : 'pointer'
+              }}
+              disabled={!isCardValid || isSubmitting}
+            >
+              {isSubmitting ? t_sc.saving : t_sc.save}
+            </button>
           </div>
           </form>
       </div>

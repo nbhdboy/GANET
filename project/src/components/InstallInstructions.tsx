@@ -218,6 +218,7 @@ const ANDROID_MANUAL_TEXT_INDEX = [
 export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallInstructionsProps) {
   const { language } = useStore();
   const t = translations[language];
+  const tInstall = t.installInstructionsPage;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<Instructions | null>(null);
@@ -366,7 +367,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
       ] : [];
       stepsArr = [...installSteps, ...networkSteps]; // 共9個文案
     } else if (inst && inst.direct_apple_installation_url && iosType === 'apple') {
-      stepsArr = [t.installInstructions + '（Apple 直接安裝）'];
+      stepsArr = [tInstall.installInstructions + '（Apple 直接安裝）'];
     }
   } else if (tab === 'android' && instructions) {
     if (androidType === 'qrcode') {
@@ -452,7 +453,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
 
   return (
     <div className="fixed inset-0 bg-white z-50 overflow-y-auto">
-      <div className="bg-line-gradient text-white sticky top-0 z-50">
+      <div className="bg-[#4CD964] text-white sticky top-0 z-50">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between py-4 relative">
             <button
@@ -463,7 +464,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
               {t.back}
             </button>
             <div className="absolute left-0 right-0 flex justify-center pointer-events-none">
-              <h1 className="text-2xl font-bold pb-0 text-center pointer-events-none">前往安裝</h1>
+              <h1 className="text-xl font-bold text-white pb-0 text-center pointer-events-none">{tInstall.title}</h1>
             </div>
           </div>
         </div>
@@ -502,12 +503,17 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
         {/* 安裝完成 bar，移到 tab 下方、圖片區上方 */}
         {usageStatus === 'ACTIVE' && (
           <div className="w-full flex justify-center mb-0 mt-1">
-            <div className="bg-line-gradient text-white rounded-2xl h-8 flex items-center gap-1.5 shadow-md w-48 justify-center">
+            <div
+              className="text-white rounded-2xl h-8 flex items-center gap-1.5 shadow-md w-48 justify-center"
+              style={{
+                background: 'linear-gradient(90deg, #2EC9C8 0%, #2AACE3 100%)',
+              }}
+            >
               <svg className="w-5 h-5 text-white flex-shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="12" cy="12" r="11" stroke="white" strokeWidth="2" fill="none" />
                 <path d="M7.5 12.5L11 16L17 9.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              <span className="font-bold text-sm leading-tight">您的 eSIM 已成功安裝</span>
+              <span className="font-bold text-sm leading-tight">{tInstall.success}</span>
             </div>
           </div>
         )}
@@ -545,26 +551,29 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
           <div className="w-full mb-2">
             <div className="flex items-center justify-between">
               <div className="text-lg font-bold text-left">
-                {(tab === 'ios' && iosType === 'qrcode') ? (step < 9 ? '流程1/2-安裝eSIM' : '流程2/2-存取數據') :
-                 (tab === 'ios' && iosType === 'apple') ? (step < 5 ? '流程1/2-安裝eSIM' : '流程2/2-存取數據') :
-                 (tab === 'android' && androidType === 'qrcode') ? (step < 11 ? '流程1/2-安裝eSIM' : '流程2/2-存取數據') :
-                 (tab === 'android' && androidType === 'manual') ? (step < 12 ? '流程1/2-安裝eSIM' : '流程2/2-存取數據') :
-                 (step < 10 ? '流程1/2-安裝eSIM' : '流程2/2-存取數據')}
+                {(tab === 'ios' && iosType === 'qrcode') ? (step < 9 ? tInstall.step1Title : tInstall.step2Title) :
+                 (tab === 'ios' && iosType === 'apple') ? (step < 5 ? tInstall.step1Title : tInstall.step2Title) :
+                 (tab === 'android' && androidType === 'qrcode') ? (step < 11 ? tInstall.step1Title : tInstall.step2Title) :
+                 (tab === 'android' && androidType === 'manual') ? (step < 12 ? tInstall.step1Title : tInstall.step2Title) :
+                 (step < 10 ? tInstall.step1Title : tInstall.step2Title)}
               </div>
               {/* drop down list 靠右 */}
               {tab === 'ios' && (
                 <select value={iosType} onChange={handleIosTypeChange} className="border border-gray-200 bg-gray-100 px-2 py-1 text-xs shadow-sm rounded-none focus:outline-none focus:ring-2 focus:ring-green-200 transition-all duration-150 ml-2">
-                  {IOS_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
+                  <option value="apple">{tInstall.iosOptions.apple}</option>
+                  <option value="qrcode">{tInstall.iosOptions.qrcode}</option>
+                  <option value="manual">{tInstall.iosOptions.manual}</option>
                 </select>
               )}
               {tab === 'android' && (
                 <select value={androidType} onChange={handleAndroidTypeChange} className="border border-gray-200 bg-gray-100 px-2 py-1 text-xs shadow-sm rounded-none focus:outline-none focus:ring-2 focus:ring-green-200 transition-all duration-150 ml-2">
-                  {ANDROID_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
+                  <option value="qrcode">{tInstall.androidOptions.qrcode}</option>
+                  <option value="manual">{tInstall.androidOptions.manual}</option>
                 </select>
               )}
             </div>
             <div className="text-sm font-semibold text-left text-[#06C755]">
-              {`步驟${step+1}`}
+              {tInstall.stepLabel.replace('{step}', String(step+1))}
             </div>
           </div>
           <div className="text-xs text-gray-800 text-left whitespace-pre-line w-full">
@@ -578,7 +587,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                       <div className="w-full flex justify-center">
                         <a href={inst.direct_apple_installation_url} target="_blank" rel="noopener noreferrer"
                           className="inline-block px-8 py-3 bg-green-500 hover:bg-green-600 text-white text-base rounded transition-colors font-medium flex items-center justify-center gap-2">
-                          點擊直接安裝
+                          {tInstall.appleDirect}
                         </a>
                       </div>
                     );
@@ -614,19 +623,19 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                 <ul className="list-disc pl-5">
                   {(() => {
                     if (tab === 'android' && androidType === 'qrcode') {
-                      return [stepsArr[textIndex] || '（無教學文字）']
+                      return [stepsArr[textIndex] || tInstall.noInstruction]
                         .filter(line => line.trim())
                         .map((line, idx) => <li key={idx}>{line.trim()}</li>);
                     } else if (tab === 'android' && androidType === 'manual') {
-                      return [stepsArr[textIndex] || '（無教學文字）']
+                      return [stepsArr[textIndex] || tInstall.noInstruction]
                         .filter(line => line.trim())
                         .map((line, idx) => <li key={idx}>{line.trim()}</li>);
                     } else if (tab === 'ios' && iosType === 'manual') {
                       // iOS 手動安裝：每一張圖只顯示一個文案
-                      return <li>{stepsArr[textIndex] || '（無教學文字）'}</li>;
+                      return <li>{stepsArr[textIndex] || tInstall.noInstruction}</li>;
                     }
                     // 其餘維持原本邏輯
-                    return (stepsArr[textIndex] || '（無教學文字）')
+                    return (stepsArr[textIndex] || tInstall.noInstruction)
                       .split(/\n|。/)
                       .filter(line => line.trim())
                       .map((line, idx) => <li key={idx}>{line.trim()}</li>);
@@ -647,7 +656,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                     <div className="bg-white rounded-xl border border-gray-200 px-3 py-2 w-full max-w-xs min-w-[180px] mx-0">
                       <div className="grid grid-cols-[88px_16px_1fr_20px] gap-x-0 gap-y-1 items-start">
                         {/* SM-DP+ 位址 */}
-                        <span className="font-bold text-xs text-black col-start-1 row-start-1 row-span-2">SM-DP+ 位址</span>
+                        <span className="font-bold text-xs text-black col-start-1 row-start-1 row-span-2">{tInstall.smdpAddress}</span>
                         <span className="font-bold text-xs text-black col-start-2 row-start-1 row-span-2 flex items-start">：</span>
                         {/* 內容多行分開顯示 */}
                         {smdp.split(/\n|<br\s*\/?/).map((line, idx) => (
@@ -658,18 +667,18 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                           className="ml-2 text-gray-400 hover:text-gray-700 col-start-4 row-start-1 row-span-2 p-0 h-5 w-5 flex items-center justify-center"
                           style={{gridRowStart: 1}}
                           onClick={() => navigator.clipboard.writeText(smdp)}
-                          title="複製 SM-DP+位址"
+                          title={tInstall.copySmdp}
                         >
                           <Copy size={12} />
                         </button>
                         {/* 啟用碼 */}
-                        <span className="font-bold text-xs text-black col-start-1 row-start-3">啟用碼</span>
+                        <span className="font-bold text-xs text-black col-start-1 row-start-3">{tInstall.activationCode}</span>
                         <span className="font-bold text-xs text-black col-start-2 row-start-3 flex items-center">：</span>
                         <span className="font-mono text-xs break-all col-start-3 row-start-3">{code}</span>
                         <button
                           className="ml-2 text-gray-400 hover:text-gray-700 col-start-4 row-start-3 p-0 h-5 w-5 flex items-center justify-center"
                           onClick={() => navigator.clipboard.writeText(code)}
-                          title="複製啟用碼"
+                          title={tInstall.copyActivation}
                         >
                           <Copy size={12} />
                         </button>
@@ -691,7 +700,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                     {/* 主要教學文字（左側） */}
                     <div className="flex-1 min-w-0">
                       <ul className="list-disc pl-5 text-left">
-                        <li>{stepsArr[textIndex] || '（無教學文字）'}</li>
+                        <li>{stepsArr[textIndex] || tInstall.noInstruction}</li>
                       </ul>
                     </div>
                     {/* QR code（右側） */}
@@ -706,7 +715,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                           href={qrUrl ? qrUrl : `data:image/png;base64,${qrData}`}
                           download="esim-qr.png"
                           className="px-1 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-300 text-xs hover:bg-gray-200 transition text-center min-w-[40px]"
-                        >下載</a>
+                        >{tInstall.download}</a>
                         {navigator.share && (
                           <button
                             className="px-1 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-300 text-xs hover:bg-gray-200 transition text-center min-w-[40px]"
@@ -717,7 +726,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                                 navigator.share({ title: 'eSIM QR code', files: [new File([Uint8Array.from(atob(qrData), c => c.charCodeAt(0))], 'esim-qr.png', { type: 'image/png' })] });
                               }
                             }}
-                          >分享</button>
+                          >{tInstall.share}</button>
                         )}
                       </div>
                     </div>
@@ -737,7 +746,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                     {/* 主要教學文字（左側） */}
                     <div className="flex-1 min-w-0">
                       <ul className="list-disc pl-5 text-left">
-                        <li>{stepsArr[textIndex] || '（無教學文字）'}</li>
+                        <li>{stepsArr[textIndex] || tInstall.noInstruction}</li>
                       </ul>
                     </div>
                     {/* QR code（右側） */}
@@ -752,7 +761,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                           href={qrUrl ? qrUrl : `data:image/png;base64,${qrData}`}
                           download="esim-qr.png"
                           className="px-1 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-300 text-xs hover:bg-gray-200 transition text-center min-w-[40px]"
-                        >下載</a>
+                        >{tInstall.download}</a>
                         {navigator.share && (
                           <button
                             className="px-1 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-300 text-xs hover:bg-gray-200 transition text-center min-w-[40px]"
@@ -763,7 +772,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                                 navigator.share({ title: 'eSIM QR code', files: [new File([Uint8Array.from(atob(qrData), c => c.charCodeAt(0))], 'esim-qr.png', { type: 'image/png' })] });
                               }
                             }}
-                          >分享</button>
+                          >{tInstall.share}</button>
                         )}
                       </div>
                     </div>
@@ -790,7 +799,7 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                     <div className="bg-white rounded-xl border border-gray-200 px-3 py-2 w-full max-w-xs min-w-[180px] mx-0">
                       <div className="grid grid-cols-[88px_16px_1fr_20px] gap-x-0 gap-y-1 items-start">
                         {/* SM-DP+ 位址 */}
-                        <span className="font-bold text-xs text-black col-start-1 row-start-1 row-span-2">SM-DP+ 位址</span>
+                        <span className="font-bold text-xs text-black col-start-1 row-start-1 row-span-2">{tInstall.smdpAddress}</span>
                         <span className="font-bold text-xs text-black col-start-2 row-start-1 row-span-2 flex items-start">：</span>
                         {/* 內容多行分開顯示 */}
                         {smdp.split(/\n|<br\s*\/?/).map((line, idx) => (
@@ -801,18 +810,18 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
                           className="ml-2 text-gray-400 hover:text-gray-700 col-start-4 row-start-1 row-span-2 p-0 h-5 w-5 flex items-center justify-center"
                           style={{gridRowStart: 1}}
                           onClick={() => navigator.clipboard.writeText(smdp)}
-                          title="複製 SM-DP+位址"
+                          title={tInstall.copySmdp}
                         >
                           <Copy size={12} />
                         </button>
                         {/* 啟用碼 */}
-                        <span className="font-bold text-xs text-black col-start-1 row-start-3">啟用碼</span>
+                        <span className="font-bold text-xs text-black col-start-1 row-start-3">{tInstall.activationCode}</span>
                         <span className="font-bold text-xs text-black col-start-2 row-start-3 flex items-center">：</span>
                         <span className="font-mono text-xs break-all col-start-3 row-start-3">{code}</span>
                         <button
                           className="ml-2 text-gray-400 hover:text-gray-700 col-start-4 row-start-3 p-0 h-5 w-5 flex items-center justify-center"
                           onClick={() => navigator.clipboard.writeText(code)}
-                          title="複製啟用碼"
+                          title={tInstall.copyActivation}
                         >
                           <Copy size={12} />
                         </button>
@@ -845,12 +854,12 @@ export function InstallInstructions({ onBack, iccid, name, flagUrl }: InstallIns
               <button
                 onClick={handlePrev}
                 className="w-20 px-2 py-1 rounded bg-gray-100 text-gray-700 text-xs disabled:opacity-50"
-              >上一步</button>
+              >{tInstall.prev}</button>
               <span className="text-xs text-gray-500 text-center">{step + 1}/{totalSteps}</span>
               <button
                 onClick={handleNext}
                 className="w-20 px-2 py-1 rounded bg-green-500 text-white text-xs disabled:opacity-50"
-              >下一步</button>
+              >{tInstall.next}</button>
             </div>
           </div>
         </div>

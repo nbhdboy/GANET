@@ -2,13 +2,15 @@
 create table if not exists public.user_cards (
     id uuid default gen_random_uuid() primary key,
     line_user_id text not null,
-    card_key text not null,
-    card_token text not null,
-    last_four text not null,
-    brand text not null,
-    expiry_month text not null,
-    expiry_year text not null,
+    card_key text,
+    card_token text,
+    last_four text,
+    brand text,
+    expiry_month text,
+    expiry_year text,
     is_default boolean default false,
+    email text,
+    carrier text,
     created_at timestamp with time zone default now(),
     updated_at timestamp with time zone default now()
 );

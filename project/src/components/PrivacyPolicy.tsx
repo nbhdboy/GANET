@@ -143,8 +143,29 @@ export function PrivacyPolicy({ onBack }: PrivacyPolicyProps) {
 
             <hr className="my-8" />
 
+            <section className="mb-8">
+              <h3 className="text-xl font-bold mb-4">10. {t.termsSection11Title}</h3>
+              <pre className="whitespace-pre-wrap text-gray-700 text-base">{t.termsSection11Content}</pre>
+            </section>
+
+            <hr className="my-8" />
+
+            <section className="mb-8">
+              <h3 className="text-xl font-bold mb-4">11. {t.termsSection12Title}</h3>
+              <pre className="whitespace-pre-wrap text-gray-700 text-base">{t.termsSection12Content}</pre>
+            </section>
+
+            <hr className="my-8" />
+
+            <section className="mb-8">
+              <h3 className="text-xl font-bold mb-4">12. {t.termsSection13Title}</h3>
+              <pre className="whitespace-pre-wrap text-gray-700 text-base">{t.termsSection13Content}</pre>
+            </section>
+
+            <hr className="my-8" />
+
             <section>
-              <h3 className="text-xl font-bold mb-4">10. {t.termsSection10Title}</h3>
+              <h3 className="text-xl font-bold mb-4">13. {t.termsSection10Title}</h3>
               <p className="mb-4">{t.termsContactUs}</p>
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="font-semibold">{t.termsCompanyName}</p>

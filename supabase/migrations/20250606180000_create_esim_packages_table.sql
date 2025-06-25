@@ -6,10 +6,12 @@ create table if not exists public.esim_packages (
     country_code text,
     operator text,
     data text not null,
+    amount numeric,
     day int not null,
     net_price numeric,
     sell_price numeric,
     is_unlimited boolean,
+    fair_usage_policy text,
     type VARCHAR(32) DEFAULT 'sim', -- 新增，標記方案型態
     updated_at timestamp with time zone default now()
 );

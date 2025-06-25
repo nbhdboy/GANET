@@ -115,3 +115,9 @@
 #card-ccv.invalid {
   border-color: #dc3545 !important;
 }
+
+.placeholder-ellipsis::placeholder {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}

@@ -39,7 +39,7 @@ export function DeletingOverlay() {
           <p className="text-xl font-semibold bg-line-gradient bg-clip-text text-transparent animate-pulse">
             {t.deleting}
           </p>
-          <p className="text-gray-500 mt-2">請稍候，正在刪除卡片…</p>
+          <p className="text-gray-500 mt-2">{t.deletingCardWait}</p>
         </div>
       </div>
     </div>

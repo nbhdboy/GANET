@@ -20,6 +20,13 @@ create table if not exists public.esim_orders (
     installation_guides jsonb,
     brand_settings_name text,
     raw_response jsonb,
+    sell_price numeric, -- 新增，加購或主卡實際售價
+    discount_code text, -- 新增，紀錄使用的折扣碼
+    discount_rate numeric, -- 新增，紀錄折扣比例（如 0.9 代表 9 折）
+    rec_invoice_id varchar(32), -- 新增，發票唯一識別碼
+    invoice_number varchar(16), -- 新增，發票號碼
+    invoice_date varchar(8),    -- 新增，發票日期
+    invoice_time varchar(8),    -- 新增，發票時間
     inserted_at timestamptz default now(),
     updated_at timestamptz default now()
 );

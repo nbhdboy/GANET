@@ -3,204 +3,183 @@ import { getAiraloAccessToken, redisDel } from "../_shared/airalo.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// 白名單：只比對 data/day，不含價格，key 為英文國家名稱
-const ALLOWED_PACKAGES: Record<string, Array<{ data: string, day: number }>> = {
-  'Japan': [
-    { data: '1GB', day: 7 },
-    { data: '2GB', day: 15 },
-    { data: '3GB', day: 30 },
-    { data: '5GB', day: 30 },
-    { data: '10GB', day: 30 },
-    { data: '20GB', day: 30 },
-  ],
-  'South Korea': [
-    { data: '1GB', day: 7 },
-    { data: '2GB', day: 15 },
-    { data: '3GB', day: 30 },
-    { data: '5GB', day: 30 },
-    { data: '10GB', day: 30 },
-    { data: '20GB', day: 30 },
-  ],
-  // ... 其餘國家依你需求補齊 ...
-};
-
 // ===== 新增：賣價對照表 =====
 const COUNTRY_CODE_SELL_PRICE: Record<string, Record<string, number>> = {
   JP: {
-    "moshi-moshi-7days-1gb": 4.8,
-    "moshi-moshi-15days-2gb": 7,
-    "moshi-moshi-30days-3gb": 10,
-    "moshi-moshi-30days-5gb": 15,
-    "moshi-moshi-30days-10gb": 22,
-    "moshi-moshi-30days-20gb": 32,
+    "moshi-moshi-7days-1gb": Math.round(4.8 * 31),
+    "moshi-moshi-15days-2gb": Math.round(7 * 31),
+    "moshi-moshi-30days-3gb": Math.round(10 * 31),
+    "moshi-moshi-30days-5gb": Math.round(15 * 31),
+    "moshi-moshi-30days-10gb": Math.round(22 * 31),
+    "moshi-moshi-30days-20gb": Math.round(32 * 31),
   },
   KR: {
-    "jang-7days-1gb": 4.0,
-    "jang-15days-2gb": 7,
-    "jang-30days-3gb": 10,
-    "jang-30days-5gb": 15,
-    "jang-30days-10gb": 22,
-    "jang-30days-20gb": 40,
+    "jang-7days-1gb": Math.round(4.0 * 31),
+    "jang-15days-2gb": Math.round(7 * 31),
+    "jang-30days-3gb": Math.round(10 * 31),
+    "jang-30days-5gb": Math.round(15 * 31),
+    "jang-30days-10gb": Math.round(22 * 31),
+    "jang-30days-20gb": Math.round(40 * 31),
   },
   HK: {
-    "hkmobile-7days-1gb": 4.5,
-    "hkmobile-15days-2gb": 7,
-    "hkmobile-30days-3gb": 8.5,
-    "hkmobile-30days-5gb": 13,
-    "hkmobile-30days-10gb": 22,
-    "hkmobile-10days-unlimited": 55,
+    "hkmobile-7days-1gb": Math.round(4.5 * 31),
+    "hkmobile-15days-2gb": Math.round(7 * 31),
+    "hkmobile-30days-3gb": Math.round(8.5 * 31),
+    "hkmobile-30days-5gb": Math.round(13 * 31),
+    "hkmobile-30days-10gb": Math.round(22 * 31),
+    "hkmobile-10days-unlimited": Math.round(55 * 31),
   },
   MO: {
-    "macau-mobile-7days-1gb": 3.5,
-    "macau-mobile-15days-2gb": 6,
-    "macau-mobile-30days-3gb": 8.5,
-    "macau-mobile-30days-5gb": 13,
-    "macau-mobile-30days-10gb": 24,
-    "macau-mobile-30days-20gb": 44,
+    "macau-mobile-7days-1gb": Math.round(3.5 * 31),
+    "macau-mobile-15days-2gb": Math.round(6 * 31),
+    "macau-mobile-30days-3gb": Math.round(8.5 * 31),
+    "macau-mobile-30days-5gb": Math.round(13 * 31),
+    "macau-mobile-30days-10gb": Math.round(24 * 31),
+    "macau-mobile-30days-20gb": Math.round(44 * 31),
   },
   SG: {
-    "connect-lah-7days-1gb": 4.5,
-    "connect-lah-15days-2gb": 6.5,
-    "connect-lah-30days-3gb": 8.5,
-    "connect-lah-30days-5gb": 13,
-    "connect-lah-30days-10gb": 22,
-    "connect-lah-30days-20gb": 40,
-    "connect-lah-10days-unlimited": 55,
+    "connect-lah-7days-1gb": Math.round(4.5 * 31),
+    "connect-lah-15days-2gb": Math.round(6.5 * 31),
+    "connect-lah-30days-3gb": Math.round(8.5 * 31),
+    "connect-lah-30days-5gb": Math.round(13 * 31),
+    "connect-lah-30days-10gb": Math.round(22 * 31),
+    "connect-lah-30days-20gb": Math.round(40 * 31),
+    "connect-lah-10days-unlimited": Math.round(55 * 31),
   },
   TH: {
-    "maew-7-days-1gb": 4.5,
-    "maew-15-days-2gb": 5,
-    "maew-30-days-3gb": 6.5,
-    "maew-30-days-5gb": 10,
-    "maew-30-days-10gb": 14,
-    "maew-30-days-20gb": 20,
-    "maew-30days-50gb": 42,
+    "maew-7-days-1gb": Math.round(4.5 * 31),
+    "maew-15-days-2gb": Math.round(5 * 31),
+    "maew-30-days-3gb": Math.round(6.5 * 31),
+    "maew-30-days-5gb": Math.round(10 * 31),
+    "maew-30-days-10gb": Math.round(14 * 31),
+    "maew-30-days-20gb": Math.round(20 * 31),
+    "maew-30days-50gb": Math.round(42 * 31),
   },
   VN: {
-    "xin-chao-7days-1gb": 4.5,
-    "xin-chao-15days-2gb": 7.5,
-    "xin-chao-30days-3gb": 10,
-    "xin-chao-30days-5gb": 15,
-    "xin-chao-30days-10gb": 29,
-    "xin-chao-30days-20gb": 50,
+    "xin-chao-7days-1gb": Math.round(4.5 * 31),
+    "xin-chao-15days-2gb": Math.round(7.5 * 31),
+    "xin-chao-30days-3gb": Math.round(10 * 31),
+    "xin-chao-30days-5gb": Math.round(15 * 31),
+    "xin-chao-30days-10gb": Math.round(29 * 31),
+    "xin-chao-30days-20gb": Math.round(50 * 31),
   },
   MY: {
-    "sambungkan-7days-1gb": 4.5,
-    "sambungkan-15days-2gb": 8,
-    "sambungkan-30days-3gb": 11,
-    "sambungkan-30days-5gb": 15,
-    "sambungkan-30days-10gb": 27,
-    "sambungkan-30days-20gb": 42,
-    "sambungkan-10days-unlimited": 50,
+    "sambungkan-7days-1gb": Math.round(4.5 * 31),
+    "sambungkan-15days-2gb": Math.round(8 * 31),
+    "sambungkan-30days-3gb": Math.round(11 * 31),
+    "sambungkan-30days-5gb": Math.round(15 * 31),
+    "sambungkan-30days-10gb": Math.round(27 * 31),
+    "sambungkan-30days-20gb": Math.round(42 * 31),
+    "sambungkan-10days-unlimited": Math.round(50 * 31),
   },
   CN: {
-    "chinacom-7days-1gb": 5.5,
-    "chinacom-15days-2gb": 9,
-    "chinacom-30days-3gb": 12,
-    "chinacom-30days-5gb": 17,
-    "chinacom-30days-10gb": 30,
-    "chinacom-30days-20gb": 50,
-    "chinam-mobile-10days-unlimited": 55,
+    "chinacom-7days-1gb": Math.round(5.5 * 31),
+    "chinacom-15days-2gb": Math.round(9 * 31),
+    "chinacom-30days-3gb": Math.round(12 * 31),
+    "chinacom-30days-5gb": Math.round(17 * 31),
+    "chinacom-30days-10gb": Math.round(30 * 31),
+    "chinacom-30days-20gb": Math.round(50 * 31),
+    "chinam-mobile-10days-unlimited": Math.round(55 * 31),
   },
   PH: {
-    "alpas-mobile-7days-1gb": 4.5,
-    "alpas-mobile-15days-2gb": 8,
-    "alpas-mobile-30days-3gb": 10,
-    "alpas-mobile-30days-5gb": 15,
-    "alpas-mobile-30days-10gb": 27,
-    "alpas-mobile-30days-20gb": 50,
+    "alpas-mobile-7days-1gb": Math.round(4.5 * 31),
+    "alpas-mobile-15days-2gb": Math.round(8 * 31),
+    "alpas-mobile-30days-3gb": Math.round(10 * 31),
+    "alpas-mobile-30days-5gb": Math.round(15 * 31),
+    "alpas-mobile-30days-10gb": Math.round(27 * 31),
+    "alpas-mobile-30days-20gb": Math.round(50 * 31),
   },
   KH: {
-    "connect-cambodia-7days-1gb": 4.5,
-    "connect-cambodia-15days-2gb": 7.5,
-    "connect-cambodia-30days-3gb": 10,
-    "connect-cambodia-30days-5gb": 15,
-    "connect-cambodia-30days-10gb": 27,
-    "connect-cambodia-30days-20gb": 50,
+    "connect-cambodia-7days-1gb": Math.round(4.5 * 31),
+    "connect-cambodia-15days-2gb": Math.round(7.5 * 31),
+    "connect-cambodia-30days-3gb": Math.round(10 * 31),
+    "connect-cambodia-30days-5gb": Math.round(15 * 31),
+    "connect-cambodia-30days-10gb": Math.round(27 * 31),
+    "connect-cambodia-30days-20gb": Math.round(50 * 31),
   },
   US: {
-    "change-7days-1gb": 5.5,
-    "change-15days-2gb": 9,
-    "change-30days-3gb": 12,
-    "change-30days-5gb": 17,
-    "change-30days-10gb": 30,
-    "change-30days-20gb": 50,
+    "change-7days-1gb": Math.round(5.5 * 31),
+    "change-15days-2gb": Math.round(9 * 31),
+    "change-30days-3gb": Math.round(12 * 31),
+    "change-30days-5gb": Math.round(17 * 31),
+    "change-30days-10gb": Math.round(30 * 31),
+    "change-30days-20gb": Math.round(50 * 31),
   },
   GB: {
-    "uki-mobile-7days-1gb": 5,
-    "uki-mobile-15days-2gb": 7.5,
-    "uki-mobile-30days-3gb": 10,
-    "uki-mobile-30days-5gb": 15,
-    "uki-mobile-30days-10gb": 22.5,
-    "uki-mobile-30days-20gb": 36,
+    "uki-mobile-7days-1gb": Math.round(5 * 31),
+    "uki-mobile-15days-2gb": Math.round(7.5 * 31),
+    "uki-mobile-30days-3gb": Math.round(10 * 31),
+    "uki-mobile-30days-5gb": Math.round(15 * 31),
+    "uki-mobile-30days-10gb": Math.round(22.5 * 31),
+    "uki-mobile-30days-20gb": Math.round(36 * 31),
   },
   DE: {
-    "hallo-mobil-7days-1gb": 4.5,
-    "hallo-mobil-15days-2gb": 6,
-    "hallo-mobil-30days-3gb": 8.5,
-    "hallo-mobil-30days-5gb": 13,
-    "hallo-mobil-30days-10gb": 23,
-    "hallo-mobil-30days-20gb": 40,
+    "hallo-mobil-7days-1gb": Math.round(4.5 * 31),
+    "hallo-mobil-15days-2gb": Math.round(6 * 31),
+    "hallo-mobil-30days-3gb": Math.round(8.5 * 31),
+    "hallo-mobil-30days-5gb": Math.round(13 * 31),
+    "hallo-mobil-30days-10gb": Math.round(23 * 31),
+    "hallo-mobil-30days-20gb": Math.round(40 * 31),
   },
   IT: {
-    "mamma-mia-7days-1gb": 4.5,
-    "mamma-mia-15days-2gb": 8,
-    "mamma-mia-30days-3gb": 8.5,
-    "mamma-mia-30days-5gb": 13,
-    "mamma-mia-30days-10gb": 23,
-    "mamma-mia-30days-20gb": 40,
+    "mamma-mia-7days-1gb": Math.round(4.5 * 31),
+    "mamma-mia-15days-2gb": Math.round(8 * 31),
+    "mamma-mia-30days-3gb": Math.round(8.5 * 31),
+    "mamma-mia-30days-5gb": Math.round(13 * 31),
+    "mamma-mia-30days-10gb": Math.round(23 * 31),
+    "mamma-mia-30days-20gb": Math.round(40 * 31),
   },
   ID: {
-    "indotel-7days-1gb": 5.5,
-    "indotel-15days-2gb": 8,
-    "indotel-30days-3gb": 11,
-    "indotel-30days-5gb": 16.5,
-    "indotel-30days-10gb": 25,
-    "indotel-30days-20gb": 50,
-    "indotel-10days-unlimited": 50,
+    "indotel-7days-1gb": Math.round(5.5 * 31),
+    "indotel-15days-2gb": Math.round(8 * 31),
+    "indotel-30days-3gb": Math.round(11 * 31),
+    "indotel-30days-5gb": Math.round(16.5 * 31),
+    "indotel-30days-10gb": Math.round(25 * 31),
+    "indotel-30days-20gb": Math.round(50 * 31),
+    "indotel-10days-unlimited": Math.round(50 * 31),
   },
 };
 
 const TITLE_SELL_PRICE: Record<string, Record<string, number>> = {
   "Europe": {
-    "eurolink-7days-1gb": 5.5,
-    "eurolink-15days-2gb": 10,
-    "eurolink-30days-3gb": 14,
-    "eurolink-30days-5gb": 21,
-    "eurolink-30days-10gb": 38,
-    "eurolink-30days-20gb": 55,
-    "eurolink-90days-50gb": 150,
-    "eurolink-180days-100gb": 290,
-    "eurolink-10days-unlimited": 50,
+    "eurolink-7days-1gb": Math.round(5.5 * 31),
+    "eurolink-15days-2gb": Math.round(10 * 31),
+    "eurolink-30days-3gb": Math.round(14 * 31),
+    "eurolink-30days-5gb": Math.round(21 * 31),
+    "eurolink-30days-10gb": Math.round(38 * 31),
+    "eurolink-30days-20gb": Math.round(55 * 31),
+    "eurolink-90days-50gb": Math.round(150 * 31),
+    "eurolink-180days-100gb": Math.round(290 * 31),
+    "eurolink-10days-unlimited": Math.round(50 * 31),
   },
   "North America": {
-    "americanmex-7days-1gb": 7,
-    "americanmex-15days-2gb": 12.5,
-    "americanmex-30days-3gb": 18,
-    "americanmex-30days-5gb": 30,
-    "americanmex-30days-10gb": 50,
+    "americanmex-7days-1gb": Math.round(7 * 31),
+    "americanmex-15days-2gb": Math.round(12.5 * 31),
+    "americanmex-30days-3gb": Math.round(18 * 31),
+    "americanmex-30days-5gb": Math.round(30 * 31),
+    "americanmex-30days-10gb": Math.round(50 * 31),
   },
   "Asia": {
-    "asialink-7days-1gb": 5.5,
-    "asialink-15days-2gb": 10,
-    "asialink-30days-3gb": 14,
-    "asialink-30days-5gb": 21,
-    "asialink-30days-10gb": 38,
-    "asialink-30days-20gb": 55,
-    "asialink-90days-50gb": 130,
-    "asialink-180days-100gb": 250,
+    "asialink-7days-1gb": Math.round(5.5 * 31),
+    "asialink-15days-2gb": Math.round(10 * 31),
+    "asialink-30days-3gb": Math.round(14 * 31),
+    "asialink-30days-5gb": Math.round(21 * 31),
+    "asialink-30days-10gb": Math.round(38 * 31),
+    "asialink-30days-20gb": Math.round(55 * 31),
+    "asialink-90days-50gb": Math.round(130 * 31),
+    "asialink-180days-100gb": Math.round(250 * 31),
   },
   "Oceania": {
-    "oceanlink-7days-1gb": 5,
-    "oceanlink-15days-2gb": 9.5,
-    "oceanlink-30days-3gb": 14,
-    "oceanlink-30days-5gb": 21,
-    "oceanlink-30days-10gb": 38,
-    "oceanlink-30days-20gb": 55,
+    "oceanlink-7days-1gb": Math.round(5 * 31),
+    "oceanlink-15days-2gb": Math.round(9.5 * 31),
+    "oceanlink-30days-3gb": Math.round(14 * 31),
+    "oceanlink-30days-5gb": Math.round(21 * 31),
+    "oceanlink-30days-10gb": Math.round(38 * 31),
+    "oceanlink-30days-20gb": Math.round(55 * 31),
   },
   "Africa": {
-    "hello-africa-30days-1gb": 27.5,
-    "hello-africa-30days-3gb": 60,
+    "hello-africa-30days-1gb": Math.round(27.5 * 31),
+    "hello-africa-30days-3gb": Math.round(60 * 31),
   },
 };
 
@@ -211,9 +190,9 @@ function getSellPrice(country_code: string, title: string, package_id: string, n
   if (TITLE_SELL_PRICE[title]?.[package_id]) {
     return TITLE_SELL_PRICE[title][package_id];
   }
-  // fallback: 沒有對照價就用 net_price * 1.5
+  // fallback: 沒有對照價就用 net_price * 1.5 * 31，最後四捨五入
   if (typeof net_price === 'number' && !isNaN(net_price)) {
-    return Math.round(net_price * 1.5 * 10) / 10;
+    return Math.round(net_price * 1.5 * 31);
   }
   return undefined;
 }
@@ -247,16 +226,41 @@ serve(async (req) => {
     });
     const airaloJson = await airaloRes.json();
     const rawPackages = airaloJson.data || [];
-    // console.log('Airalo API 回傳資料:', rawPackages);
+    console.log('Airalo API 回傳 package 數量:', rawPackages.length);
+    console.log('Airalo API 回傳資料:', JSON.stringify(rawPackages, null, 2));
 
     console.log('開始篩選白名單 package');
-    // 2. 依據 ALLOWED_PACKAGES 白名單篩選
-    const filteredPackages = rawPackages.filter(pkg => {
-      const allowed = ALLOWED_PACKAGES[pkg.country];
-      if (!allowed) return false;
-      return allowed.some(rule => rule.data === pkg.data && rule.day === pkg.day);
+    // 展開所有國家下的 operator 與 package，攤平成一維陣列
+    const flattenedPackages = [];
+    for (const country of rawPackages) {
+      for (const operator of (country.operators || [])) {
+        for (const pkg of (operator.packages || [])) {
+          flattenedPackages.push({
+            package_id: pkg.id,
+            country: country.title,
+            country_code: country.country_code,
+            operator: operator.title,
+            data: pkg.data,
+            amount: pkg.amount,
+            day: pkg.day,
+            net_price: pkg.net_price,
+            sell_price: getSellPrice(country.country_code, country.title, pkg.id, pkg.net_price),
+            is_unlimited: pkg.is_unlimited,
+            fair_usage_policy: pkg.fair_usage_policy,
+            type: pkg.type,
+            // updated_at 由 DB 自動產生
+          });
+        }
+      }
+    }
+
+    // 篩選白名單
+    const filteredPackages = flattenedPackages.filter(pkg => {
+      const allowedByCode = ALLOWED_COUNTRY_CODES.includes(pkg.country_code);
+      const allowedByTitle = ALLOWED_TITLES.includes(pkg.country);
+      return allowedByCode || allowedByTitle;
     });
-    // console.log('白名單 package:', filteredPackages);
+    console.log('白名單篩選後 package 數量:', filteredPackages.length);
 
     console.log('開始 upsert DB');
     // 查詢現有 package_id
@@ -271,6 +275,7 @@ serve(async (req) => {
     const existingIds = (existingRows || []).map(r => r.package_id);
     // 篩選出 DB 沒有的新 package
     const newPackages = (filteredPackages || []).filter(pkg => !existingIds.includes(pkg.package_id));
+    console.log('本次要 upsert 新 package 數量:', newPackages.length);
     if (newPackages.length === 0) {
       console.log('無新專案更新');
     } else {

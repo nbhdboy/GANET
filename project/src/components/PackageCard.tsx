@@ -13,6 +13,9 @@ interface PackageCardProps {
     totalData?: string;
     topUpCount?: number;
     iccid?: string;
+    apn_value?: string;
+    apn?: string;
+    addOnPackages?: ESIMPackage[];
   };
   onSelect: (pkg: ESIMPackage) => void;
   isPurchased?: boolean;
@@ -44,9 +47,37 @@ const countryCodeToBg: Record<string, string> = {
   AF: '非洲.png',
 };
 
+const countryNames: Record<string, { en: string; zh_TW: string }> = {
+  JP: { en: 'Japan', zh_TW: '日本' },
+  KR: { en: 'South Korea', zh_TW: '韓國' },
+  US: { en: 'United States', zh_TW: '美國' },
+  HK: { en: 'Hong Kong', zh_TW: '香港' },
+  MO: { en: 'Macau', zh_TW: '澳門' },
+  SG: { en: 'Singapore', zh_TW: '新加坡' },
+  TH: { en: 'Thailand', zh_TW: '泰國' },
+  VN: { en: 'Vietnam', zh_TW: '越南' },
+  MY: { en: 'Malaysia', zh_TW: '馬來西亞' },
+  CN: { en: 'China', zh_TW: '中國' },
+  PH: { en: 'Philippines', zh_TW: '菲律賓' },
+  KH: { en: 'Cambodia', zh_TW: '柬埔寨' },
+  GB: { en: 'United Kingdom', zh_TW: '英國' },
+  DE: { en: 'Germany', zh_TW: '德國' },
+  IT: { en: 'Italy', zh_TW: '義大利' },
+  ID: { en: 'Indonesia', zh_TW: '印尼' },
+  AS: { en: 'Asia', zh_TW: '亞洲' },
+  EU: { en: 'Europe', zh_TW: '歐洲' },
+  NA: { en: 'North America', zh_TW: '北美洲' },
+  OC: { en: 'Oceania', zh_TW: '大洋洲' },
+  AF: { en: 'Africa', zh_TW: '非洲' },
+};
+
 export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstallInstructions }: PackageCardProps) {
   const { language } = useStore();
   const t = translations[language];
+  const t_pc = t.packageCard;
+  const countryDisplayName = countryNames[pkg.countryCode]?.[language] ?? pkg.country;
+
+  console.log('countryCode:', pkg.countryCode);
 
   // 格式化數據顯示
   const formatDataAmount = (amount: string) => {
@@ -56,15 +87,37 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
   };
 
   // 格式化有效期顯示
-  const formatValidity = (validity: string) => {
-    if (!validity) return '';
-    // 若為中文語系，去除 days 與多餘單位
-    if (language === 'zh' || language === 'zh-TW') {
-      return validity.replace(/\s*days?/, '') + '天';
+  const formatValidity = (validity: string | number) => {
+    if (validity === undefined || validity === null) return '';
+    const validityStr = String(validity);
+    if (language === 'zh_TW') {
+      return validityStr.replace(/\s*days?/, '') + t_pc.daysUnit;
     }
-    // 其他語系保留原本格式
-    return validity;
+    return validityStr;
   };
+
+  // 加總 top up 數據、天數、金額
+  const addOnPackages = pkg.addOnPackages || [];
+  // 數據加總（GB）
+  const parseData = (d) => {
+    if (!d) return 0;
+    if (typeof d === 'number') return d;
+    if (d.toLowerCase().includes('unlimited')) return 0; // 無限流量不加總
+    if (d.toLowerCase().includes('gb')) return parseFloat(d);
+    if (d.toLowerCase().includes('mb')) return parseFloat(d) / 1024;
+    return 0;
+  };
+  const mainData = parseData(pkg.dataAmount || pkg.data || '');
+  const topupData = addOnPackages.reduce((sum, t) => sum + parseData(t.dataAmount || t.data), 0);
+  const totalData = mainData + topupData;
+  // 有效期間加總（天）
+  const mainValidity = parseInt(pkg.validity) || 0;
+  const topupValidity = addOnPackages.reduce((sum, t) => sum + (parseInt(t.validity) || 0), 0);
+  const totalValidity = mainValidity + topupValidity;
+  // 金額加總
+  const mainPrice = Number(pkg.sell_price) || 0;
+  const topupTotal = addOnPackages.reduce((sum, t) => sum + (Number(t.sell_price) || 0), 0);
+  const totalPrice = mainPrice + topupTotal;
 
   const renderUsageGraph = () => {
     const used = parseFloat(pkg.usedData || '0');
@@ -74,7 +127,7 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
     return (
       <div className="mb-6">
         <div className="flex justify-between text-sm text-gray-600 mb-2">
-          <span>REMAINING DATA</span>
+          <span>{t_pc.remainingData}</span>
           <span>{pkg.totalData}</span>
         </div>
         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -84,8 +137,8 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
           />
         </div>
         <div className="flex justify-between text-sm mt-2">
-          <span className="text-gray-600">USED DATA</span>
-          <span className="text-gray-900">{pkg.usedData || '0 MB'}</span>
+          <span className="text-gray-600">{t_pc.usedData}</span>
+          <span className="text-gray-900">{pkg.usedData || t_pc.defaultUsedData}</span>
         </div>
       </div>
     );
@@ -99,9 +152,9 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
     };
 
     const statusText = {
-      active: 'Active',
-      inactive: 'Inactive',
-      not_activated: 'Not Activated'
+      active: t_pc.statusActive,
+      inactive: t_pc.statusNotActive,
+      not_activated: t_pc.statusNotActive
     };
 
     return pkg.status ? (
@@ -111,6 +164,9 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
     ) : null;
   };
 
+  // 只針對主卡（type === 'sim'）顯示卡片
+  if (pkg.type !== 'sim') return null;
+
   return (
     <div 
       className="bg-white rounded-2xl p-6 shadow-card hover:shadow-lg transition-shadow duration-300 cursor-pointer"
@@ -119,72 +175,69 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
       <div className="flex items-center gap-4 mb-4">
         <div className="relative w-12 h-8 bg-white rounded-xl overflow-hidden shadow-sm p-0.5">
           <img
-            src={`https://flagcdn.com/${pkg.countryCode.toLowerCase()}.svg`}
-            alt={pkg.country}
-            className="w-full h-full object-cover"
-            style={{
-              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
-              imageRendering: 'crisp-edges'
-            }}
+            src={pkg.countryCode ? `https://flagcdn.com/${pkg.countryCode.toLowerCase()}.svg` : '/default-flag.svg'}
+            alt={countryDisplayName || ''}
+            className="w-full h-full object-contain rounded shadow"
           />
         </div>
         <div className="flex items-center gap-2">
-          <h3 className="text-xl font-bold">{pkg.country}</h3>
-          {pkg.status && (
-            <span className={`ml-2 px-3 py-0.5 rounded-full text-sm font-semibold align-middle
-              ${(pkg.status && pkg.status.toLowerCase() === 'active') ? 'bg-green-100 text-green-700'
-                : (pkg.status && pkg.status.toLowerCase() === 'not_active') ? 'bg-yellow-100 text-yellow-700'
-                : (pkg.status && pkg.status.toLowerCase() === 'expired') ? 'bg-gray-200 text-gray-600'
-                : (pkg.status && pkg.status.toLowerCase() === 'finished') ? 'bg-gray-200 text-gray-600'
-                : 'bg-gray-200 text-gray-600'}`}>
-              {(pkg.status && pkg.status.toLowerCase() === 'active') ? '啟動中'
-                : (pkg.status && pkg.status.toLowerCase() === 'not_active') ? '尚未啟用'
-                : (pkg.status && pkg.status.toLowerCase() === 'expired') ? '已過期'
-                : (pkg.status && pkg.status.toLowerCase() === 'finished') ? '已用完'
-                : pkg.status}
-            </span>
+          <h3 className="text-xl font-bold">{countryDisplayName}</h3>
+          {pkg.status && pkg.status.toLowerCase() === 'active' && (
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#4CD964] text-white ml-2">{t_pc.statusActive}</span>
+          )}
+          {pkg.status && pkg.status.toLowerCase() === 'not_active' && (
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-400 text-white ml-2">{t_pc.statusNotActive}</span>
+          )}
+          {pkg.status && pkg.status.toLowerCase() === 'expired' && (
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-400 text-white ml-2">{t_pc.statusExpired}</span>
+          )}
+          {pkg.status && pkg.status.toLowerCase() === 'finished' && (
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-400 text-white ml-2">{t_pc.statusFinished}</span>
           )}
         </div>
       </div>
 
-      <div className="space-y-3 mb-6">
+      <div className="space-y-1 mb-6">
         {pkg.iccid && (
           <div className="flex items-center gap-3">
-            <span className="inline-block w-6 text-center text-line font-bold">#</span>
+            <span className="inline-block w-6 text-center text-line font-bold text-sm">#</span>
             <div>
-              <p className="text-gray-600">ICCID</p>
-              <p className="text-lg font-semibold tracking-widest">{pkg.iccid}</p>
+              <p className="text-black text-sm">{t_pc.iccid}</p>
+              <p className="text-gray-400 text-sm font-semibold tracking-widest">{pkg.iccid}</p>
             </div>
           </div>
         )}
         <div className="flex items-center gap-3">
-          <Signal className="text-line" size={24} />
+          <span className="inline-block w-6 text-center text-line font-bold text-sm">+</span>
           <div>
-            <p className="text-gray-600">{t.data}</p>
-            <p className="text-lg font-semibold">
-              {formatDataAmount(isPurchased ? pkg.totalData || pkg.dataAmount : pkg.dataAmount)}
-            </p>
+            <p className="text-black text-sm">{t_pc.apn}</p>
+            <p className="text-gray-400 text-sm font-semibold tracking-widest">{pkg.apn_value || pkg.apn || t_pc.noApn}</p>
           </div>
         </div>
-
         <div className="flex items-center gap-3">
-          <Calendar className="text-line" size={24} />
+          <Signal className="text-line" size={20} />
           <div>
-            <p className="text-gray-600">{t.validityRange || '有效期間'}</p>
-            <p className="text-lg font-semibold">
-              {pkg.validity ? formatValidity(pkg.validity) : ''}
+            <p className="text-black text-sm">{t.data}</p>
+            <p className="text-gray-400 text-sm font-semibold">
+              {totalData > 0 ? `${totalData} ${t_pc.gbUnit}` : formatDataAmount(pkg.dataAmount || pkg.data || '')}
             </p>
           </div>
         </div>
-
+        <div className="flex items-center gap-3">
+          <Calendar className="text-line" size={20} />
+          <div>
+            <p className="text-black text-sm">{t.validityRange || t_pc.validityPeriod}</p>
+            <p className="text-gray-400 text-sm font-semibold">
+              {totalValidity > 0 ? `${totalValidity}${t_pc.daysUnit}` : (pkg.validity ? formatValidity(pkg.validity) : '')}
+            </p>
+          </div>
+        </div>
         {isPurchased && (
           <div className="flex items-center gap-3">
-            <Plus className="text-line" size={24} />
+            <Plus className="text-line" size={20} />
             <div>
-              <p className="text-gray-600">{t.topUpCount || '加購次數'}</p>
-              <p className="text-lg font-semibold">
-                {pkg.topUpCount ? `x${pkg.topUpCount}` : '0'}
-              </p>
+              <p className="text-black text-sm">{t_pc.topUpCount}</p>
+              <p className="text-gray-400 text-sm font-semibold tracking-widest">{pkg.addOnPackages?.length || 0}</p>
             </div>
           </div>
         )}
@@ -193,7 +246,7 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
       <div className="mt-6 pt-4 border-t border-gray-100">
         <div className="flex justify-between items-center">
           <span className="text-base font-bold text-line">
-            {pkg.currency} {Number(pkg.price).toFixed(1)}
+            {t_pc.currency} {Math.round(totalPrice)}
           </span>
           <div className="flex gap-2">
             <button 
@@ -203,7 +256,7 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
                 onSelect(pkg);
               }}
             >
-              {isPurchased ? '查看用量' : t.select}
+              {isPurchased ? t_pc.viewUsage : t.select}
             </button>
             {onShowInstallInstructions && (
               <button
@@ -213,7 +266,7 @@ export function PackageCard({ package: pkg, onSelect, isPurchased, onShowInstall
                   onShowInstallInstructions(pkg.iccid);
                 }}
               >
-                前往安裝
+                {t_pc.installNow}
               </button>
             )}
           </div>

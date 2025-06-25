@@ -13,7 +13,7 @@ export interface Store {
 }
 
 export const useStore = create<Store>((set, get) => ({
-  language: 'zh-TW',
+  language: 'zh_TW',
   setLanguage: (language) => set({ language }),
   user: null,
   setUser: (user) => {
@@ -33,21 +33,20 @@ export const useStore = create<Store>((set, get) => ({
     await new Promise(r => setTimeout(r, 2000));
     console.log('=== fetchUserCards 執行 ===');
     console.log('fetchUserCards: 查詢 user_cards for', user.userId);
+    // 只查詢安全欄位
     const { data, error } = await supabase
       .from('user_cards')
-      .select('*')
+      .select('id, last_four, brand, expiry_month, expiry_year')
       .eq('line_user_id', user.userId);
     console.log('fetchUserCards 查詢結果:', data, error);
     console.log('【DEBUG】fetchUserCards 查詢結果 data:', data);
-    // 不論 data 是什麼都 set，並強制產生新 reference
+    // 只存安全欄位
     const cards = (data || []).map(card => ({
-      id: card.card_key,
-      last4: card.last_four,
+      id: card.id,
+      last_four: card.last_four,
       brand: card.brand,
       expiryMonth: card.expiry_month,
-      expiryYear: card.expiry_year,
-      token: card.card_token,
-      cardKey: card.card_key
+      expiryYear: card.expiry_year
     }));
     set((state) => ({
       user: state.user ? { ...state.user, savedCards: [...cards] } : null,

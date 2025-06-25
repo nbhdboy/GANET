@@ -164,6 +164,7 @@ const TARGET_COUNTRIES: Record<string, { zh: string; code: string; flag: string 
   'Germany': { zh: '德國', code: 'DE', flag: '🇩🇪' },
   'Italy': { zh: '義大利', code: 'IT', flag: '🇮🇹' },
   'Indonesia': { zh: '印尼', code: 'ID', flag: '🇮🇩' },
+  'United States': { zh: '美國', code: 'US', flag: '🇺🇸' },
   'Europe': { zh: '歐洲地區', code: 'EU', flag: '🇪🇺' },
   'North America': { zh: '北美地區', code: 'NA', flag: '🌎' },
   'Asia': { zh: '亞洲地區', code: 'AS', flag: '🌏' },

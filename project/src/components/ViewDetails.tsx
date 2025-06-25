@@ -36,8 +36,8 @@ export function ViewDetails({
   const { language } = useStore();
   const t = translations[language];
   const [currentTopUpIndex, setCurrentTopUpIndex] = useState(0);
-  const [touchStart, setTouchStart] = useState(0);
-  const [touchEnd, setTouchEnd] = useState(0);
+  const touchStartRef = useRef(0);
+  const touchEndRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [usage, setUsage] = useState<any>(null);
@@ -97,11 +97,11 @@ export function ViewDetails({
             ...cache,
             [pkg.iccid]: { data: json.data, ts: now }
           };
-        } else setUsageError('查無用量資料');
+        } else setUsageError(t.viewDetails.usageErrorNoData);
       })
-      .catch(() => setUsageError('查詢失敗'))
+      .catch(() => setUsageError(t.viewDetails.usageErrorFailed))
       .finally(() => setUsageLoading(false));
-  }, [pkg.iccid]);
+  }, [pkg.iccid, t]);
 
   useEffect(() => {
     if (!pkg.iccid) return;
@@ -126,7 +126,7 @@ export function ViewDetails({
       })
       .then(({ data, error }) => {
         if (error) {
-          setTopUpError('查詢加購方案失敗');
+          setTopUpError(t.viewDetails.topUpErrorFailed);
           setTopUpPackages([]);
         } else {
           setTopUpPackages(data || []);
@@ -134,11 +134,11 @@ export function ViewDetails({
         }
       })
       .catch(() => {
-        setTopUpError('查詢加購方案失敗');
+        setTopUpError(t.viewDetails.topUpErrorFailed);
         setTopUpPackages([]);
       })
       .finally(() => setTopUpLoading(false));
-  }, [pkg.iccid]);
+  }, [pkg.iccid, t]);
 
   useEffect(() => {
     if (!pkg.iccid) return;
@@ -153,23 +153,22 @@ export function ViewDetails({
   }, [pkg.iccid]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.targetTouches[0].clientX);
+    touchStartRef.current = e.targetTouches[0].clientX;
+    touchEndRef.current = e.targetTouches[0].clientX;
     setIsDragging(true);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging) return;
-    const currentX = e.targetTouches[0].clientX;
-    const newOffset = currentX - touchStart;
-    // 允許在第一個項目時向右滑動，最後一個項目時向左滑動
+    touchEndRef.current = e.targetTouches[0].clientX;
+    const newOffset = touchEndRef.current - touchStartRef.current;
     setDragOffset(newOffset);
-    setTouchEnd(currentX);
   };
 
   const handleTouchEnd = () => {
     setIsDragging(false);
     const minSwipeDistance = 50;
-    const swipeDistance = touchStart - touchEnd;
+    const swipeDistance = touchStartRef.current - touchEndRef.current;
     
     if (Math.abs(swipeDistance) >= minSwipeDistance) {
       if (swipeDistance > 0) {
@@ -198,12 +197,15 @@ export function ViewDetails({
   const handleTopUp = (e: React.MouseEvent, selectedPackage: typeof topUpPackages[0]) => {
     e.stopPropagation();
     if (onPurchaseConfirm) {
+      console.log('【DEBUG】加購彈窗 handleTopUp 被呼叫，selectedPackage:', selectedPackage);
       const topUpPackage = {
         ...pkg,
         package_id: selectedPackage.package_id,
         dataAmount: selectedPackage.data,
         validity: selectedPackage.day,
         price: parseFloat(selectedPackage.sell_price),
+        sell_price: parseFloat(selectedPackage.sell_price),
+        currency: 'TWD',
         // 更新加購專案列表
         addOnPackages: [
           ...(pkg.addOnPackages || []),
@@ -216,6 +218,7 @@ export function ViewDetails({
         purchaseCount: (pkg.purchaseCount || 0) + 1,
         isTopUp: true
       };
+      console.log('【DEBUG】加購彈窗 handleTopUp 傳遞 topUpPackage:', topUpPackage);
       onPurchaseConfirm(topUpPackage);
     }
   };
@@ -236,25 +239,15 @@ export function ViewDetails({
   const renderUsageGraph = () => {
     // 狀態優先顯示
     let statusText = '';
-    let percent = 100;
+    let percentUsed = 0;
     let used = 0;
     let total = 0;
+    let isFinished = false;
     if (usage) {
       used = usage.total - usage.remaining;
       total = usage.total;
-      if (usage.status === 'NOT_ACTIVE') {
-        statusText = '尚未啟用';
-        percent = 100;
-      } else if (usage.status === 'ACTIVE') {
-        statusText = '啟用中';
-        percent = total > 0 ? Math.round((used / total) * 100) : 0;
-      } else if (usage.status === 'EXPIRED') {
-        statusText = '已過期';
-        percent = 0;
-      } else {
-        statusText = usage.status;
-        percent = total > 0 ? Math.round((used / total) * 100) : 0;
-      }
+      isFinished = usage.status === 'FINISHED';
+      percentUsed = total > 0 ? Math.round((used / total) * 100) : 0;
     }
     const radius = 150;
     const centerX = 120;
@@ -262,21 +255,21 @@ export function ViewDetails({
     const strokeWidth = 20;
 
     // 計算圓弧路徑
-    const createArc = (percentage: number) => {
+    // 支援可選 startAngle
+    const createArc = (percentage: number, startAngle = -180) => {
       const r = radius - strokeWidth / 2;
-      const startAngle = -180;
-      const endAngle = -180 + (180 * percentage) / 100;
-      
+      const endAngle = startAngle + (180 * percentage) / 100;
+
       const startRad = (startAngle * Math.PI) / 180;
       const endRad = (endAngle * Math.PI) / 180;
-      
+
       const x1 = centerX + r * Math.cos(startRad);
       const y1 = centerY + r * Math.sin(startRad);
       const x2 = centerX + r * Math.cos(endRad);
       const y2 = centerY + r * Math.sin(endRad);
-      
-      const largeArcFlag = percentage > 50 ? 1 : 0;
-      
+
+      const largeArcFlag = 0;
+
       return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2} ${y2}`;
     };
 
@@ -287,9 +280,23 @@ export function ViewDetails({
           <div className="flex items-center justify-between mb-0">
             <div className="flex items-center gap-2">
               <Signal className="w-4 h-4" />
-              <span className="font-medium text-sm">數據用量</span>
+              <span className="font-medium text-sm">{t.viewDetails.dataUsage}</span>
             </div>
-            <span className="text-xs text-gray-500">{statusText}</span>
+            {usage && usage.status === 'ACTIVE' && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#4CD964] text-white ml-2">{t.viewDetails.statusActive}</span>
+            )}
+            {usage && usage.status === 'NOT_ACTIVE' && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-400 text-white ml-2">{t.viewDetails.statusNotActive}</span>
+            )}
+            {usage && usage.status === 'EXPIRED' && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-400 text-white ml-2">{t.viewDetails.statusExpired}</span>
+            )}
+            {usage && usage.status === 'FINISHED' && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-400 text-white ml-2">{t.viewDetails.statusFinished}</span>
+            )}
+            {usage && !['ACTIVE','NOT_ACTIVE','EXPIRED','FINISHED'].includes(usage.status) && (
+              <span className="text-xs text-gray-500">{statusText}</span>
+            )}
           </div>
           <div className="relative mt-4">
             <div className="w-full h-36 mx-auto relative">
@@ -301,41 +308,50 @@ export function ViewDetails({
                       <stop offset="100%" style={{ stopColor: '#86EFAC' }} />
                     </linearGradient>
                   </defs>
-                  {/* 背景圓弧 - 使用淺綠色漸層 */}
-                  <path
-                    d={createArc(100)}
-                    fill="none"
-                    stroke="url(#greenGradient)"
-                    strokeWidth={strokeWidth}
-                    strokeLinecap="round"
-                  />
-                  {/* 已使用進度 - 灰色 */}
-                  {percent > 0 && (
+                  {/* 綠色底半圓，永遠畫滿 */}
+                  {!isFinished && (
                     <path
-                      d={createArc(percent)}
+                      d={createArc(100, -180)}
+                      fill="none"
+                      stroke="url(#greenGradient)"
+                      strokeWidth={strokeWidth}
+                      strokeLinecap="round"
+                    />
+                  )}
+                  {/* 灰色已用量覆蓋，從左邊起，覆蓋已用百分比 */}
+                  {isFinished ? (
+                    <path
+                      d={createArc(100, -180)}
                       fill="none"
                       stroke="#E5E7EB"
                       strokeWidth={strokeWidth}
                       strokeLinecap="round"
                     />
+                  ) : (
+                    percentUsed > 0 && (
+                      <path
+                        d={createArc(percentUsed, -180)}
+                        fill="none"
+                        stroke="#E5E7EB"
+                        strokeWidth={strokeWidth}
+                        strokeLinecap="round"
+                      />
+                    )
                   )}
-                  {/* 進度點 */}
-                  <circle
-                    cx={centerX + (radius - strokeWidth / 2) * Math.cos((-180 + (180 * percent) / 100) * Math.PI / 180)}
-                    cy={centerY + (radius - strokeWidth / 2) * Math.sin((-180 + (180 * percent) / 100) * Math.PI / 180)}
-                    r={strokeWidth / 2}
-                    fill={percent > 0 ? '#E5E7EB' : '#86EFAC'}
-                  />
                 </svg>
               </div>
               <div className="absolute inset-0 flex items-center justify-center flex-col translate-y-2">
                 {usageLoading ? (
-                  <span className="text-gray-400">載入中...</span>
+                  <span className="text-gray-400">{t.viewDetails.loading}</span>
                 ) : usageError ? (
                   <span className="text-red-500">{usageError}</span>
                 ) : (
                   <>
-                    <span className="text-3xl font-bold text-gray-700">{percent}%</span>
+                    <span className="text-3xl font-bold text-gray-700">{isFinished ? 100 : percentUsed}%</span>
+                    <div className="flex items-center justify-center gap-1 mt-7">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-[#4CD964]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke="#4CD964" strokeWidth="2" fill="white"/><path stroke="#4CD964" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01"/></svg>
+                      <span className="text-xs text-black">{t.viewDetails.usageUpdateDisclaimer}</span>
+                    </div>
                     <div className="text-sm text-gray-500">{t.remainingData}</div>
                   </>
                 )}
@@ -344,16 +360,20 @@ export function ViewDetails({
           </div>
           <div className="mt-0 space-y-1.5 border-t pt-2 text-xs">
             <div className="flex justify-between">
-              <span className="text-gray-500">已使用數據</span>
-              <span className="font-medium">{used} MB</span>
+              <span className="text-black">{t.viewDetails.currentPlanData}</span>
+              <span className="font-medium text-gray-500">{usage ? usage.total : 0} MB</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">尚未使用數據</span>
-              <span className="font-medium">{usage ? usage.remaining : 0} MB</span>
+              <span className="text-black">{t.viewDetails.dataUsed}</span>
+              <span className="font-medium text-gray-500">{used} MB</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">有效期間</span>
-              <span className="font-medium">{usage && usage.expired_at ? usage.expired_at : '尚未啟用'}</span>
+              <span className="text-black">{t.viewDetails.dataRemaining}</span>
+              <span className="font-medium text-gray-500">{usage ? usage.remaining : 0} MB</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-black">{t.viewDetails.validityPeriod}</span>
+              <span className="font-medium text-gray-500">{usage && usage.expired_at ? usage.expired_at : t.viewDetails.statusNotActive}</span>
             </div>
           </div>
         </div>
@@ -373,26 +393,26 @@ export function ViewDetails({
         <div className="mt-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Signal className="w-5 h-5" />
-              <span className="font-medium">基本數據</span>
-            </div>
-            <span className="text-lg">{pkg.dataAmount}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              <span className="font-medium">已加購專案</span>
+              <Calendar className="w-5 h-5 text-[#4CD964]" />
+              <span className="font-medium">{t.viewDetails.addOns}</span>
             </div>
             <div className="text-right">
               {pkg.addOnPackages && pkg.addOnPackages.length > 0 ? (
                 pkg.addOnPackages.map((addOn, index) => (
                   <div key={index} className="bg-green-50 rounded-lg px-4 py-2 mb-2 last:mb-0">
                     <div className="font-medium text-green-600 text-lg">{addOn.dataAmount}</div>
-                    <div className="text-sm text-gray-600">{addOn.validity ? `有效期間 ${addOn.validity}天` : ''}</div>
+                    <div className="text-sm text-gray-600">{
+                      addOn.validity
+                        ? (language === 'en'
+                            ? `Valid for ${String(addOn.validity).replace('天', '')} days`
+                            : t.viewDetails.validityDuration.replace('{days}', addOn.validity)
+                          )
+                        : ''
+                    }</div>
                   </div>
                 ))
               ) : (
-                <span className="text-gray-500">尚未加購專案</span>
+                <span className="text-gray-500">{t.viewDetails.noAddOns}</span>
               )}
             </div>
           </div>
@@ -412,15 +432,19 @@ export function ViewDetails({
     return getGB(a.data) - getGB(b.data);
   });
 
-  const renderTopUpPackages = () => (
-    <div className="bg-white rounded-lg p-4 h-full">
-      <h3 className="text-lg font-semibold mb-2">可用的加值套餐</h3>
+  const renderTopUpPackages = () => {
+    // 判斷當前 eSIM 是否已封存
+    const isArchived = usage?.status === 'EXPIRED' || usage?.status === 'FINISHED';
+
+    return (
+    <div className={`bg-white rounded-lg p-4 h-full ${isArchived ? 'grayscale' : ''}`}>
+      <h3 className="text-lg font-semibold mb-2">{t.viewDetails.availableTopUps}</h3>
       {topUpLoading ? (
-        <div className="text-gray-400">載入中...</div>
+        <div className="text-gray-400">{t.viewDetails.loading}</div>
       ) : topUpError ? (
         <div className="text-red-500">{topUpError}</div>
       ) : sortedTopUpPackages.length === 0 ? (
-        <div className="text-gray-500">尚無可加購方案</div>
+        <div className="text-gray-500">{t.viewDetails.noAvailableTopUps}</div>
       ) : (
         <div className="relative overflow-hidden h-[calc(100%-3rem)]">
           <div 
@@ -446,18 +470,18 @@ export function ViewDetails({
                   <div className="flex w-full justify-between mb-4">
                     <div className="flex flex-col items-center w-1/3">
                       <CreditCard className="text-green-500 mb-1" size={24} />
-                      <span className="text-black text-sm mb-1">價格</span>
-                      <span className="font-normal text-gray-500 text-lg">${topUpPkg.sell_price ? Number(topUpPkg.sell_price).toFixed(1) : '-'}</span>
+                      <span className="text-black text-sm mb-1">{t.viewDetails.price}</span>
+                      <span className="font-normal text-gray-500 text-lg">${topUpPkg.sell_price ? Math.round(Number(topUpPkg.sell_price)) : '-'}</span>
                     </div>
                     <div className="flex flex-col items-center w-1/3">
                       <Wifi className="text-green-500 mb-1" size={24} />
-                      <span className="text-black text-sm mb-1">數據</span>
+                      <span className="text-black text-sm mb-1">{t.viewDetails.data}</span>
                       <span className="font-normal text-gray-500 text-lg">{topUpPkg.data}</span>
                     </div>
                     <div className="flex flex-col items-center w-1/3">
                       <Clock className="text-green-500 mb-1" size={24} />
-                      <span className="text-black text-sm mb-1">效期</span>
-                      <span className="font-normal text-gray-500 text-lg">{topUpPkg.day}天</span>
+                      <span className="text-black text-sm mb-1">{t.viewDetails.validity}</span>
+                      <span className="font-normal text-gray-500 text-lg">{topUpPkg.day}{t.viewDetails.daysUnit}</span>
                     </div>
                   </div>
                   {/* brand logo 一排＋小時數 */}
@@ -488,7 +512,7 @@ export function ViewDetails({
                               className="w-4 h-4 object-contain mb-1"
                             />
                             <span className="text-[10px] text-gray-500 leading-tight">{hours ? hours.toFixed(1) : '-'}</span>
-                            <span className="text-[10px] text-gray-400 leading-tight">小時</span>
+                            <span className="text-[10px] text-gray-400 leading-tight">{t.viewDetails.hoursUnit}</span>
                           </div>
                         );
                       });
@@ -496,10 +520,15 @@ export function ViewDetails({
                   </div>
                   <div className="space-y-2">
                     <button 
-                      onClick={(e) => handleTopUp(e, topUpPkg)}
-                      className="w-full py-3 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-[16px] text-sm hover:from-green-500 hover:to-green-600 transition-all duration-300"
+                      onClick={(e) => !isArchived && handleTopUp(e, topUpPkg)}
+                      disabled={isArchived}
+                      className={`w-full py-3 text-white rounded-[16px] text-sm transition-all duration-300 ${
+                        isArchived 
+                        ? 'bg-gray-300 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600'
+                      }`}
                     >
-                      {t.topUp}
+                      {isArchived ? t.viewDetails.cannotTopUp : t.topUp}
                     </button>
                     <div className="flex justify-center gap-2 pt-2">
                       {sortedTopUpPackages.map((_, idx) => (
@@ -519,11 +548,12 @@ export function ViewDetails({
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <div className="fixed inset-0 bg-gray-50 z-50 overflow-y-auto pb-[60px]">
-      <div className="bg-line-gradient text-white sticky top-0 z-50">
+      <div className="bg-[#4CD964] text-white sticky top-0 z-50">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between py-4 relative">
             <button
@@ -534,7 +564,7 @@ export function ViewDetails({
               {t.back}
             </button>
             <div className="absolute left-0 right-0 flex justify-center pointer-events-none">
-              <h1 className="text-2xl font-bold pb-0 text-center pointer-events-none">{pkg.name}</h1>
+              <h1 className="text-xl font-bold text-white pb-0 text-center pointer-events-none">{t.viewDetails.title}</h1>
             </div>
           </div>
         </div>

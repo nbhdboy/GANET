@@ -76,25 +76,35 @@ serve(async (req) => {
       });
     }
 
-    // TapPay 刪除成功後，從 Supabase user_cards 資料表刪除該卡片
-    const { error: deleteError } = await supabase
+    // TapPay 刪除成功後，從 Supabase user_cards 資料表更新該卡片，而不是刪除
+    const { error: updateError } = await supabase
       .from("user_cards")
-      .delete()
+      .update({
+        card_key: null,
+        card_token: null,
+        last_four: null,
+        brand: null,
+        expiry_month: null,
+        expiry_year: null,
+        updated_at: new Date().toISOString()
+      })
       .eq("id", latestCard.id);
-    if (deleteError) {
-      return new Response(JSON.stringify({ error: "TapPay 刪除成功但資料庫刪除失敗", detail: deleteError.message }), {
+
+    if (updateError) {
+      return new Response(JSON.stringify({ error: "TapPay 刪除成功但資料庫更新失敗", detail: updateError.message }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 再次確認該 user 沒有殘留卡片
+    // 再次確認該 user 卡片資訊已被清除
     const { data: remainCards } = await supabase
       .from("user_cards")
-      .select("id")
+      .select("id, card_key")
       .eq("line_user_id", line_user_id);
-    if (remainCards && remainCards.length > 0) {
-      console.warn(`刪除後仍有殘留卡片:`, remainCards);
+      
+    if (remainCards && remainCards.length > 0 && remainCards[0].card_key) {
+      console.warn(`更新後卡片資訊仍有殘留:`, remainCards);
     }
 
     return new Response(JSON.stringify({ success: true, tappay: tappayData }), {
