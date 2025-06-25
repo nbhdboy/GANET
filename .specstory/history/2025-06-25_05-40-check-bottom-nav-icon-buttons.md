@@ -594,7 +594,134 @@ _**User**_
 
 _**Assistant**_
 
+```diff
+                <p>{t.termsTermsChanges}</p>
+              </section>
+- 
+-             <hr className="my-8" />
+- 
+-             <section>
+-               <h3 className="text-xl font-bold mb-4">10. {t.termsSection10Title}</h3>
+-               <p className="mb-4">{t.termsContactUs}</p>
+-               <div className="bg-gray-50 p-4 rounded-lg">
+-                 <p className="font-semibold">{t.termsCompanyName}</p>
+-                 <p>{t.termsEmail}</p>
+-                 <p>{t.termsAddress}</p>
+-                 <p>{t.termsServiceTime}</p>
+-               </div>
+-             </section>
+  
+              <hr className="my-8" />
+  
+              <section className="mb-8">
+-               <h3 className="text-xl font-bold mb-4">11. {t.termsSection11Title}</h3>
++               <h3 className="text-xl font-bold mb-4">10. {t.termsSection11Title}</h3>
+                <pre className="whitespace-pre-wrap text-gray-700 text-base">{t.termsSection11Content}</pre>
+              </section>
+```
 
+```diff
+  
+              <section className="mb-8">
+-               <h3 className="text-xl font-bold mb-4">12. {t.termsSection12Title}</h3>
++               <h3 className="text-xl font-bold mb-4">11. {t.termsSection12Title}</h3>
+                <pre className="whitespace-pre-wrap text-gray-700 text-base">{t.termsSection12Content}</pre>
+              </section>
+```
+
+```diff
+  
+              <section className="mb-8">
+-               <h3 className="text-xl font-bold mb-4">13. {t.termsSection13Title}</h3>
++               <h3 className="text-xl font-bold mb-4">12. {t.termsSection13Title}</h3>
+                <pre className="whitespace-pre-wrap text-gray-700 text-base">{t.termsSection13Content}</pre>
+              </section>
++ 
++             <hr className="my-8" />
++ 
++             <section>
++               <h3 className="text-xl font-bold mb-4">13. {t.termsSection10Title}</h3>
++               <p className="mb-4">{t.termsContactUs}</p>
++               <div className="bg-gray-50 p-4 rounded-lg">
++                 <p className="font-semibold">{t.termsCompanyName}</p>
++                 <p>{t.termsEmail}</p>
++                 <p>{t.termsAddress}</p>
++                 <p>{t.termsServiceTime}</p>
++               </div>
++             </section>
+            </div>
+          </div>
+```
+
+---
+
+已經幫你將條款順序調整如下：
+
+- 第10條：個人資料蒐集目的與類別
+- 第11條：個人資料使用之期間、地區、對象及方式
+- 第12條：您依個資法第三條所擁有的權利與行使方式
+- 第13條：聯絡我們
+
+顯示格式、風格與前面條款完全一致。  
+如需再調整內容或順序，請隨時告知！
+
+---
+
+_**User**_
+
+很好！幫我上傳至@https://github.com/nbhdboy/GANET 
+
+---
+
+_**Assistant**_
+
+很高興你滿意目前的調整！  
+但依據你的需求，「上傳至 https://github.com/nbhdboy/GANET」這個動作需要你本地有該 repo 的 push 權限，並且已經設定好 git remote。如果你已經有權限並且本地 repo 已經連結到該 GitHub 專案，請按照以下步驟操作：
+
+1. 確認你已經在本地專案資料夾（CANET）下，且 remote 已設定為 https://github.com/nbhdboy/GANET。
+2. 執行以下 git 指令：
+
+```bash
+git add .
+git commit -m "feat: 新增隱私權條款第10-13條，調整條款順序"
+git push origin main
+```
+
+如果你還沒設定 remote，可以用這個指令：
+
+```bash
+git remote add origin https://github.com/nbhdboy/GANET.git
+```
+
+然後再執行上述 add/commit/push 流程。
+
+如果你希望我幫你產生一鍵執行的指令，或需要自動化腳本，請告訴我你目前的 git 狀態（例如：分支名稱、是否已設定 remote），我可以直接幫你產生正確的指令！
+
+---
+
+_**User**_
+
+你剛剛上傳github是全部都上傳嗎
+
+---
+
+_**Assistant**_
+
+剛剛我提供的 git 指令（git add .）會將你目前專案資料夾（CANET）下「所有有變動的檔案」一併加入 commit，然後 push 到 GitHub。也就是說：
+
+- 只要是你有修改、刪除或新增的檔案，全部都會被上傳（commit & push）。
+- 沒有變動的檔案不會重複上傳。
+
+如果你只想上傳特定檔案（例如只上傳 PrivacyPolicy.tsx 和 i18n/index.ts），可以改用：
+
+```bash
+git add project/src/components/PrivacyPolicy.tsx project/src/i18n/index.ts
+git commit -m "feat: 新增隱私權條款第10-13條，調整條款順序"
+git push origin main
+```
+
+這樣就只會上傳你指定的檔案。  
+如果你有其他需求（例如只上傳某個資料夾、或要排除某些檔案），也可以告訴我，我會用最精確的方式協助你！
 
 ---
 
